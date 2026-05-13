@@ -9,6 +9,11 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     
+    <!-- Three.js for 3D Rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/STLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/OrbitControls.js"></script>
+    
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
@@ -31,6 +36,11 @@
                 language: localStorage.getItem('language') || 'it',
                 user: null,
                 searchPrinter: '',
+                showPrinterDropdown: false,
+                
+                // 3D Viewer State
+                hasModel: false,
+                isDragging: false,
 
                 // Calculator Data
                 spools: [{ costPerKg: 23.00, grams: 170 }],
@@ -44,7 +54,7 @@
                 profitPercent: 30,
                 ivaPercent: 22,
                 printerBrands: CalcService.printerBrands,
-
+                
                 init() {
                     // Controllo se Firebase è caricato (fondamentale per Render/GitHub)
                     if (typeof auth !== 'undefined') {
@@ -119,6 +129,14 @@
                             if (p) { this.printerWattage = p.watts; }
                         }
                     }
+                    this.showPrinterDropdown = false;
+                    this.searchPrinter = '';
+                },
+
+                getSelectedPrinterName() {
+                    if (this.selectedPrinter === 'custom') return this.t('custom_printer');
+                    const [brand, name] = this.selectedPrinter.split('|');
+                    return brand && name ? `${brand} ${name}` : this.selectedPrinter;
                 },
 
                 formatEuro(value) {
@@ -127,6 +145,108 @@
                         style: 'currency', 
                         currency: 'EUR' 
                     }).format(value || 0);
+                },
+
+                // 3D Viewer Logic
+                init3D() {
+                    const container = document.getElementById('stl-container');
+                    if (!container) return;
+
+                    this.scene = new THREE.Scene();
+                    this.scene.background = new THREE.Color(this.darkMode ? 0x111827 : 0xf3f4f6);
+                    
+                    this.camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+                    this.camera.position.set(0, 0, 100);
+
+                    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                    this.renderer.setSize(container.clientWidth, container.clientHeight);
+                    this.renderer.setPixelRatio(window.devicePixelRatio);
+                    container.appendChild(this.renderer.domElement);
+
+                    // Lights
+                    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+                    this.scene.add(ambientLight);
+                    const pointLight = new THREE.PointLight(0xffffff, 1);
+                    this.camera.add(pointLight);
+                    this.scene.add(this.camera);
+
+                    // Controls
+                    this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+                    this.controls.enableDamping = true;
+
+                    // Animation Loop
+                    const animate = () => {
+                        requestAnimationFrame(animate);
+                        this.controls.update();
+                        this.renderer.render(this.scene, this.camera);
+                    };
+                    animate();
+
+                    // Resize Observer
+                    const resizeObserver = new ResizeObserver(() => {
+                        if (container.clientWidth > 0) {
+                            this.camera.aspect = container.clientWidth / container.clientHeight;
+                            this.camera.updateProjectionMatrix();
+                            this.renderer.setSize(container.clientWidth, container.clientHeight);
+                        }
+                    });
+                    resizeObserver.observe(container);
+                    
+                    this.$watch('darkMode', value => {
+                        this.scene.background = new THREE.Color(value ? 0x111827 : 0xf3f4f6);
+                    });
+                },
+
+                handleFileSelect(event) {
+                    const file = event.target.files[0];
+                    if (file) this.loadSTL(file);
+                },
+
+                handleDrop(event) {
+                    this.isDragging = false;
+                    const file = event.dataTransfer.files[0];
+                    if (file && file.name.toLowerCase().endsWith('.stl')) {
+                        this.loadSTL(file);
+                    }
+                },
+
+                loadSTL(file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const loader = new THREE.STLLoader();
+                        const geometry = loader.parse(e.target.result);
+                        
+                        // Clear previous mesh
+                        if (this.currentMesh) this.scene.remove(this.currentMesh);
+
+                        const material = new THREE.MeshPhongMaterial({ 
+                            color: 0x3b82f6, 
+                            specular: 0x111111, 
+                            shininess: 200 
+                        });
+                        this.currentMesh = new THREE.Mesh(geometry, material);
+                        
+                        // Center model
+                        geometry.computeBoundingBox();
+                        const center = new THREE.Vector3();
+                        geometry.boundingBox.getCenter(center);
+                        geometry.translate(-center.x, -center.y, -center.z);
+
+                        // Auto-scale to fit
+                        const size = new THREE.Vector3();
+                        geometry.boundingBox.getSize(size);
+                        const maxDim = Math.max(size.x, size.y, size.z);
+                        const scale = 50 / maxDim;
+                        this.currentMesh.scale.set(scale, scale, scale);
+
+                        this.scene.add(this.currentMesh);
+                        this.hasModel = true;
+                        
+                        // Reset camera
+                        this.camera.position.set(50, 50, 50);
+                        this.controls.reset();
+                    };
+                    reader.readAsArrayBuffer(file);
                 },
                 
                 translations: {
@@ -179,6 +299,8 @@
                         history: 'Storico Cloud',
                         calc: 'Calcolatore',
                         save: 'Salva nel Cloud',
+                        drop_stl: 'Trascina qui il file STL o clicca per caricare',
+                        stl_viewer: 'Anteprima 3D Modello',
                         confirm_delete_quote: 'Sei sicuro di voler eliminare questo preventivo?',
                         admin_panel: 'Pannello Admin',
                         total_users: 'Utenti Totali',
@@ -237,6 +359,8 @@
                         history: 'Cloud History',
                         calc: 'Calculator',
                         save: 'Save to Cloud',
+                        drop_stl: 'Drop STL file here or click to upload',
+                        stl_viewer: '3D Model Preview',
                         confirm_delete_quote: 'Are you sure you want to delete this quote?',
                         admin_panel: 'Admin Panel',
                         total_users: 'Total Users',
@@ -531,27 +655,51 @@
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2" x-text="t('printer_model')"></label>
-                                <div class="relative">
-                                    <div class="relative mb-2">
-                                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                            <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                <div class="relative" @click.away="showPrinterDropdown = false">
+                                    <!-- Toggle Button -->
+                                    <button @click="showPrinterDropdown = !showPrinterDropdown" 
+                                            class="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-sm font-bold">
+                                        <span x-text="getSelectedPrinterName()"></span>
+                                        <svg class="w-4 h-4 transition-transform duration-200" :class="showPrinterDropdown ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                    </button>
+
+                                    <!-- Dropdown Menu -->
+                                    <div x-show="showPrinterDropdown" 
+                                         x-transition:enter="transition ease-out duration-100"
+                                         x-transition:enter-start="opacity-0 scale-95"
+                                         x-transition:enter-end="opacity-100 scale-100"
+                                         class="absolute z-50 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden">
+                                        
+                                        <!-- Search inside dropdown -->
+                                        <div class="p-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
+                                            <div class="relative">
+                                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                    <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                                </div>
+                                                <input type="text" x-model="searchPrinter" :placeholder="t('search_placeholder')" 
+                                                       class="w-full pl-10 pr-3 py-2 bg-white dark:bg-gray-800 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-xs"
+                                                       @click.stop>
+                                            </div>
                                         </div>
-                                        <input type="text" x-model="searchPrinter" :placeholder="t('search_placeholder')" class="w-full pl-10 pr-3 py-2.5 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-sm">
-                                        <button x-show="searchPrinter" @click="searchPrinter = ''" class="absolute inset-y-0 right-0 pr-3 flex items-center">
-                                            <svg class="h-4 w-4 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                        </button>
+
+                                        <!-- Options List -->
+                                        <div class="max-h-64 overflow-y-auto custom-scrollbar">
+                                            <template x-for="p in filteredPrinters" :key="p.id">
+                                                <button @click="selectedPrinter = p.id; updatePrinterPower()" 
+                                                        class="w-full text-left px-4 py-3 text-sm hover:bg-emerald-50 dark:hover:bg-emerald-900/20 border-b border-gray-50 dark:border-gray-700/50 last:border-0 transition-colors flex items-center justify-between group">
+                                                    <div>
+                                                        <span x-text="p.brand !== '--' ? p.brand + ' - ' : ''" class="text-gray-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400"></span>
+                                                        <span x-text="p.name" class="font-bold dark:text-white"></span>
+                                                    </div>
+                                                    <span x-text="p.watts + 'W'" class="text-[10px] bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-500"></span>
+                                                </button>
+                                            </template>
+                                        </div>
+                                        
+                                        <div class="p-2 bg-gray-50 dark:bg-gray-900/30 text-center">
+                                            <p class="text-[10px] text-gray-400 italic" x-text="t('search_hint')"></p>
+                                        </div>
                                     </div>
-                                    
-                                    <select x-model="selectedPrinter" @change="updatePrinterPower()" class="w-full p-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl h-56 focus:ring-2 focus:ring-emerald-500 outline-none text-sm overflow-y-auto" size="5">
-                                         <template x-for="p in filteredPrinters" :key="p.id">
-                                             <option :value="p.id" 
-                                                     class="py-2 px-3 border-b border-gray-100 dark:border-gray-600 last:border-0"
-                                                     x-text="(p.brand !== '--' ? p.brand + ' - ' : '') + p.name + ' (' + p.watts + 'W)'">
-                                             </option>
-                                         </template>
-                                     </select>
-                                    
-                                    <p class="mt-2 text-[10px] text-gray-400 italic" x-text="t('search_hint')"></p>
                                 </div>
                             </div>
                         </div>
@@ -614,6 +762,33 @@
 
             <!-- Colonna Risultati (4/12) -->
             <div class="lg:col-span-4 space-y-6 lg:sticky lg:top-6">
+                <!-- 3D Viewer Section -->
+                <section class="bg-white dark:bg-gray-800 p-4 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden" 
+                         x-init="init3D()">
+                    <h3 class="text-sm font-bold mb-3 dark:text-white flex items-center gap-2 px-2">
+                        <div class="p-1.5 bg-blue-100 dark:bg-blue-900 rounded-lg">
+                            <svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg>
+                        </div>
+                        <span x-text="t('stl_viewer')"></span>
+                    </h3>
+                    
+                    <div id="stl-container" 
+                         class="relative w-full h-64 bg-gray-50 dark:bg-gray-900 rounded-2xl border-2 border-dashed transition-all duration-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden"
+                         :class="isDragging ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700'"
+                         @dragover.prevent="isDragging = true"
+                         @dragleave.prevent="isDragging = false"
+                         @drop.prevent="handleDrop($event)"
+                         @click="$refs.fileInput.click()">
+                        
+                        <input type="file" x-ref="fileInput" class="hidden" accept=".stl" @change="handleFileSelect($event)">
+                        
+                        <div x-show="!hasModel" class="text-center p-6 pointer-events-none">
+                            <svg class="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                            <p class="text-xs text-gray-400 font-medium" x-text="t('drop_stl')"></p>
+                        </div>
+                    </div>
+                </section>
+
                 <section class="bg-gray-900 p-8 rounded-[2.5rem] text-white shadow-2xl flex flex-col relative overflow-hidden">
                     <!-- Sfondo Decorativo -->
                     <div class="absolute -right-20 -top-20 w-64 h-64 bg-blue-600/20 rounded-full blur-3xl"></div>
