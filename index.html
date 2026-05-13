@@ -36,7 +36,7 @@
                 spools: [{ costPerKg: 23.00, grams: 170 }],
                 printHours: 4,
                 printMinutes: 0,
-                selectedPrinter: 'X1-Carbon / X1-C',
+                selectedPrinter: 'Bambu Lab|X1-Carbon / X1-C',
                 printerWattage: 120,
                 kwhCost: 0.33,
                 maintenanceCost: 10,   // Usura Macchina (%)
@@ -68,6 +68,31 @@
                 },
 
                 // Getters (Utilizzano il CalcService "backend")
+                get filteredPrinters() {
+                    const search = this.searchPrinter.toLowerCase().trim();
+                    const results = [];
+                    
+                    // Aggiungiamo l'opzione personalizzata in alto se non c'è ricerca o se la ricerca include "custom"
+                    if (!search || 'personalizzato'.includes(search) || 'custom'.includes(search)) {
+                        results.push({ brand: '--', name: this.t('custom_printer'), watts: 0, id: 'custom' });
+                    }
+
+                    for (const [brand, printers] of Object.entries(this.printerBrands)) {
+                        printers.forEach(p => {
+                            const fullName = `${brand} ${p.name}`.toLowerCase();
+                            if (!search || fullName.includes(search)) {
+                                results.push({
+                                     brand: brand,
+                                     name: p.name,
+                                     watts: p.watts,
+                                     id: `${brand}|${p.name}`
+                                 });
+                            }
+                        });
+                    }
+                    return results;
+                },
+
                 get results() {
                     return CalcService.generateQuote({
                         spools: this.spools,
@@ -86,19 +111,12 @@
                 addSpool() { this.spools.push({ costPerKg: 20.00, grams: 0 }); },
                 removeSpool(index) { this.spools.splice(index, 1); },
                 
-                filteredBrands() {
-                    if (!this.searchPrinter) return Object.keys(this.printerBrands);
-                    return Object.keys(this.printerBrands).filter(brand => {
-                        return brand.toLowerCase().includes(this.searchPrinter.toLowerCase()) || 
-                               this.printerBrands[brand].some(p => p.name.toLowerCase().includes(this.searchPrinter.toLowerCase()));
-                    });
-                },
-
                 updatePrinterPower() {
                     if (this.selectedPrinter !== 'custom') {
-                        for (let brand in this.printerBrands) {
-                            const p = this.printerBrands[brand].find(x => x.name === this.selectedPrinter);
-                            if (p) { this.printerWattage = p.watts; break; }
+                        const [brand, name] = this.selectedPrinter.split('|');
+                        if (brand && name && this.printerBrands[brand]) {
+                            const p = this.printerBrands[brand].find(x => x.name === name);
+                            if (p) { this.printerWattage = p.watts; }
                         }
                     }
                 },
@@ -514,17 +532,26 @@
                             <div>
                                 <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2" x-text="t('printer_model')"></label>
                                 <div class="relative">
-                                    <input type="text" x-model="searchPrinter" :placeholder="t('search_placeholder')" class="w-full p-3 mb-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all">
-                                    <select x-model="selectedPrinter" @change="updatePrinterPower()" class="w-full p-3 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl h-48 focus:ring-2 focus:ring-emerald-500 outline-none" size="5">
-                                        <option value="custom" x-text="t('custom_printer')" class="font-bold py-2"></option>
-                                        <template x-for="brand in filteredBrands()" :key="brand">
-                                            <optgroup :label="brand" class="font-black text-emerald-600 uppercase text-[10px] mt-4">
-                                                <template x-for="p in printerBrands[brand]" :key="p.name">
-                                                    <option :value="p.name" x-text="p.name" x-show="p.name.toLowerCase().includes(searchPrinter.toLowerCase())" class="py-1 px-2 text-sm"></option>
-                                                </template>
-                                            </optgroup>
-                                        </template>
-                                    </select>
+                                    <div class="relative mb-2">
+                                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                        </div>
+                                        <input type="text" x-model="searchPrinter" :placeholder="t('search_placeholder')" class="w-full pl-10 pr-3 py-2.5 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-sm">
+                                        <button x-show="searchPrinter" @click="searchPrinter = ''" class="absolute inset-y-0 right-0 pr-3 flex items-center">
+                                            <svg class="h-4 w-4 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                        </button>
+                                    </div>
+                                    
+                                    <select x-model="selectedPrinter" @change="updatePrinterPower()" class="w-full p-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl h-56 focus:ring-2 focus:ring-emerald-500 outline-none text-sm overflow-y-auto" size="5">
+                                         <template x-for="p in filteredPrinters" :key="p.id">
+                                             <option :value="p.id" 
+                                                     class="py-2 px-3 border-b border-gray-100 dark:border-gray-600 last:border-0"
+                                                     x-text="(p.brand !== '--' ? p.brand + ' - ' : '') + p.name + ' (' + p.watts + 'W)'">
+                                             </option>
+                                         </template>
+                                     </select>
+                                    
+                                    <p class="mt-2 text-[10px] text-gray-400 italic" x-text="t('search_hint')"></p>
                                 </div>
                             </div>
                         </div>

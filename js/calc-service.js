@@ -11,7 +11,8 @@ const CalcService = {
             { name: 'P1S', watts: 125 },
             { name: 'P1P', watts: 120 },
             { name: 'A1', watts: 200 },
-            { name: 'A1 Mini', watts: 78 }
+            { name: 'A1 Mini', watts: 78 },
+            { name: 'X1 Series (Base)', watts: 110 }
         ],
         'Creality': [
             { name: 'K1 / K1C', watts: 180 },
@@ -20,43 +21,61 @@ const CalcService = {
             { name: 'Ender 3 V3 SE', watts: 115 },
             { name: 'Ender 3 V3 KE', watts: 130 },
             { name: 'Ender 3 V2 / Pro', watts: 120 },
+            { name: 'Ender 3 Neo / Max Neo', watts: 120 },
+            { name: 'Ender 3 (Original)', watts: 100 },
             { name: 'Ender 5 S1', watts: 150 },
             { name: 'Ender 5 Plus', watts: 200 },
+            { name: 'Ender 5 Pro', watts: 120 },
             { name: 'CR-10 Smart Pro', watts: 150 },
+            { name: 'CR-10 V3', watts: 150 },
             { name: 'CR-M4', watts: 400 },
-            { name: 'Halot Mage Pro (Resin)', watts: 150 }
+            { name: 'CR-6 SE', watts: 120 },
+            { name: 'Halot Mage Pro (Resin)', watts: 150 },
+            { name: 'Halot One (Resin)', watts: 60 }
         ],
         'Prusa Research': [
             { name: 'MK4S / MK4', watts: 100 },
             { name: 'MK3S+ / MK3', watts: 80 },
+            { name: 'MK2.5S / MK2S', watts: 80 },
             { name: 'XL (1 Toolhead)', watts: 235 },
             { name: 'XL (2 Toolheads)', watts: 280 },
             { name: 'XL (5 Toolheads)', watts: 350 },
             { name: 'MINI+', watts: 75 },
-            { name: 'SL1S SPEED (Resin)', watts: 100 }
+            { name: 'SL1S SPEED (Resin)', watts: 100 },
+            { name: 'SL1 (Resin)', watts: 100 }
         ],
         'Anycubic': [
             { name: 'Kobra 3 / S1', watts: 185 },
             { name: 'Kobra 2 Pro / Plus', watts: 150 },
             { name: 'Kobra Neo 2', watts: 110 },
+            { name: 'Kobra Go / Neo', watts: 110 },
             { name: 'Photon Mono M7 Pro', watts: 120 },
             { name: 'Photon Mono M5s', watts: 100 },
-            { name: 'Vyper', watts: 150 }
+            { name: 'Photon Mono 2', watts: 45 },
+            { name: 'Photon M3 Plus', watts: 120 },
+            { name: 'Vyper', watts: 150 },
+            { name: 'Chiron', watts: 200 }
         ],
         'Elegoo': [
             { name: 'Neptune 4 Max', watts: 220 },
             { name: 'Neptune 4 Plus', watts: 200 },
             { name: 'Neptune 4 Pro', watts: 150 },
+            { name: 'Neptune 4', watts: 150 },
             { name: 'Neptune 3 Pro', watts: 120 },
+            { name: 'Neptune 3 Plus / Max', watts: 150 },
             { name: 'Mars 5 Ultra (Resin)', watts: 35 },
+            { name: 'Mars 4 / 3 (Resin)', watts: 35 },
             { name: 'Saturn 4 Ultra (Resin)', watts: 144 },
+            { name: 'Saturn 3 / 2 (Resin)', watts: 100 },
             { name: 'Jupiter SE (Resin)', watts: 150 }
         ],
         'Artillery': [
             { name: 'Sidewinder X4 Pro', watts: 160 },
             { name: 'Sidewinder X4 Plus', watts: 250 },
             { name: 'Sidewinder X2', watts: 150 },
-            { name: 'Genius Pro', watts: 120 }
+            { name: 'Sidewinder X1', watts: 150 },
+            { name: 'Genius Pro', watts: 120 },
+            { name: 'Hornet', watts: 100 }
         ],
         'AnkerMake': [
             { name: 'M5', watts: 180 },
@@ -65,21 +84,28 @@ const CalcService = {
         'QIDI Tech': [
             { name: 'X-Max 3', watts: 450 },
             { name: 'X-Plus 3', watts: 350 },
-            { name: 'X-Smart 3', watts: 200 }
+            { name: 'X-Smart 3', watts: 200 },
+            { name: 'i-Fast', watts: 450 },
+            { name: 'X-CF Pro', watts: 450 }
         ],
         'Flashforge': [
             { name: 'Adventurer 5M Pro', watts: 150 },
             { name: 'Adventurer 5M', watts: 120 },
-            { name: 'Guider 3 Ultra', watts: 450 }
+            { name: 'Adventurer 4 / 4 Pro', watts: 150 },
+            { name: 'Adventurer 3', watts: 100 },
+            { name: 'Guider 3 Ultra', watts: 450 },
+            { name: 'Creator Pro 2', watts: 320 }
         ],
         'Voron (Stime Medie)': [
             { name: 'Voron 2.4 350mm', watts: 250 },
             { name: 'Voron 2.4 300mm', watts: 200 },
             { name: 'Voron Trident 250mm', watts: 180 },
-            { name: 'Voron V0.2', watts: 60 }
+            { name: 'Voron V0.2', watts: 60 },
+            { name: 'Voron Switchwire', watts: 150 }
         ],
         'RatRig (Stime Medie)': [
             { name: 'V-Core 3.1 500mm', watts: 400 },
+            { name: 'V-Core 3.1 400mm', watts: 300 },
             { name: 'V-Core 3.1 300mm', watts: 250 },
             { name: 'V-Minion', watts: 80 }
         ],
@@ -87,63 +113,105 @@ const CalcService = {
             { name: 'S7', watts: 250 },
             { name: 'S5', watts: 200 },
             { name: 'S3', watts: 150 },
-            { name: '2+ Connect', watts: 120 }
+            { name: '2+ Connect', watts: 120 },
+            { name: 'Method XL', watts: 500 }
         ],
         'Formlabs (Resin)': [
             { name: 'Form 4', watts: 150 },
             { name: 'Form 3+', watts: 100 },
-            { name: 'Form 3L', watts: 250 }
+            { name: 'Form 3L', watts: 250 },
+            { name: 'Form 2', watts: 100 }
         ],
         'Peopoly (Resin)': [
             { name: 'Magneto X', watts: 300 },
-            { name: 'Forge', watts: 180 }
+            { name: 'Forge', watts: 180 },
+            { name: 'Phenom Prime', watts: 200 }
         ],
         'Phrozen (Resin)': [
             { name: 'Sonic Mighty 8K', watts: 120 },
             { name: 'Sonic Mini 8K S', watts: 40 },
-            { name: 'Sonic Mega 8K S', watts: 250 }
+            { name: 'Sonic Mega 8K S', watts: 250 },
+            { name: 'Sonic Shuffle', watts: 60 }
         ],
         'Geeetech': [
             { name: 'Mizar M', watts: 150 },
             { name: 'Thunder', watts: 300 },
-            { name: 'A20M (Dual)', watts: 150 }
+            { name: 'A20M (Dual)', watts: 150 },
+            { name: 'A10 series', watts: 120 }
         ],
         'Sovol': [
             { name: 'SV08', watts: 300 },
             { name: 'SV07 Plus', watts: 200 },
             { name: 'SV06 Plus', watts: 150 },
-            { name: 'SV06', watts: 120 }
+            { name: 'SV06', watts: 120 },
+            { name: 'SV04 IDEX', watts: 180 }
         ],
         'Kingroon': [
             { name: 'KP3S Pro V2', watts: 100 },
-            { name: 'KLP1', watts: 150 }
+            { name: 'KLP1', watts: 150 },
+            { name: 'KP5L', watts: 150 }
         ],
         'Two Trees': [
             { name: 'Sapphire Plus', watts: 200 },
-            { name: 'SK1', watts: 250 }
+            { name: 'SK1', watts: 250 },
+            { name: 'Bluer Plus', watts: 150 }
         ],
         'Flying Bear': [
             { name: 'Ghost 6', watts: 150 },
+            { name: 'Ghost 5', watts: 150 },
             { name: 'Reborn 2', watts: 300 }
         ],
         'Biqu / BigTreeTech': [
             { name: 'Hurakan', watts: 150 },
-            { name: 'B1 SE Plus', watts: 150 }
+            { name: 'B1 SE Plus', watts: 150 },
+            { name: 'Thunderbolt', watts: 200 }
         ],
         'Snapmaker': [
             { name: 'Artisan 3-in-1', watts: 400 },
-            { name: 'J1 / J1s IDEX', watts: 250 }
+            { name: 'J1 / J1s IDEX', watts: 250 },
+            { name: 'Snapmaker 2.0 A350', watts: 300 }
         ],
         'Raised3D': [
-            { name: 'Pro3', watts: 450 },
-            { name: 'E2', watts: 350 }
+            { name: 'Pro3 / Pro3 Plus', watts: 450 },
+            { name: 'E2 / E2CF', watts: 350 },
+            { name: 'Pro2 / Pro2 Plus', watts: 400 }
         ],
         'Zortrax': [
             { name: 'M200 Plus', watts: 150 },
-            { name: 'Inpire', watts: 350 }
+            { name: 'M300 Dual', watts: 350 },
+            { name: 'Inkspire 2 (Resin)', watts: 200 }
         ],
         'Wuxn': [
             { name: 'W7', watts: 180 }
+        ],
+        'Anet': [
+            { name: 'A8 / A8 Plus', watts: 120 },
+            { name: 'ET4 / ET5 Pro', watts: 150 }
+        ],
+        'Voxelab': [
+            { name: 'Aquila X3 / X2', watts: 120 },
+            { name: 'Elefoo', watts: 100 }
+        ],
+        'Mingda': [
+            { name: 'Magician X / Pro', watts: 150 },
+            { name: 'Rock 3', watts: 150 }
+        ],
+        'Tronxy': [
+            { name: 'X5SA Pro', watts: 200 },
+            { name: 'Crux 1', watts: 80 }
+        ],
+        'Kywoo': [
+            { name: 'Tycoon Max', watts: 180 }
+        ],
+        'LulzBot': [
+            { name: 'Taz SideKick 747', watts: 150 },
+            { name: 'Mini 2', watts: 120 }
+        ],
+        'Dremel': [
+            { name: 'DigiLab 3D45', watts: 150 }
+        ],
+        'XYZprinting': [
+            { name: 'da Vinci Junior', watts: 60 }
         ]
     },
 
