@@ -50,6 +50,11 @@
                 // 3D Viewer State
                 hasModel: false,
                 isDragging: false,
+                
+                // Cloud State
+                quotes: [],
+                loadingQuotes: false,
+                saving: false,
 
                 // Calculator Data
                 spools: [{ costPerKg: 23.00, grams: 170 }],
@@ -73,6 +78,7 @@
                                 window.location.href = 'auth.html';
                             } else {
                                 this.user = user;
+                                this.fetchQuotes();
                             }
                         });
                     } else {
@@ -154,6 +160,75 @@
                         style: 'currency', 
                         currency: 'EUR' 
                     }).format(value || 0);
+                },
+
+                // Cloud Logic
+                async saveQuote() {
+                    if (!this.user) return;
+                    this.saving = true;
+                    try {
+                        const quoteData = {
+                            userId: this.user.uid,
+                            userEmail: this.user.email,
+                            timestamp: Date.now(),
+                            printer: this.getSelectedPrinterName(),
+                            finalPrice: this.results.finalPrice,
+                            details: {
+                                materialCost: this.results.materialCost,
+                                energyCost: this.results.energyCost,
+                                machineCost: this.results.machineCost,
+                                failureImpact: this.results.failureImpact,
+                                ivaAmount: this.results.ivaAmount,
+                                profitAmount: this.results.profitAmount,
+                                inputs: {
+                                    spools: JSON.parse(JSON.stringify(this.spools)),
+                                    hours: this.printHours,
+                                    minutes: this.printMinutes,
+                                    wattage: this.printerWattage
+                                }
+                            }
+                        };
+                        await DbService.saveQuote(quoteData);
+                        await this.fetchQuotes();
+                        alert(this.language === 'it' ? "Preventivo salvato correttamente!" : "Quote saved successfully!");
+                    } catch (err) {
+                        console.error("Errore salvataggio:", err);
+                        alert("Errore durante il salvataggio.");
+                    } finally {
+                        this.saving = false;
+                    }
+                },
+
+                async fetchQuotes() {
+                    if (!this.user) return;
+                    this.loadingQuotes = true;
+                    try {
+                        this.quotes = await DbService.getUserQuotes(this.user.uid);
+                    } catch (err) {
+                        console.error("Errore recupero:", err);
+                    } finally {
+                        this.loadingQuotes = false;
+                    }
+                },
+
+                async deleteQuote(id) {
+                    if (!confirm(this.t('confirm_delete_quote'))) return;
+                    try {
+                        await DbService.deleteQuote(id);
+                        await this.fetchQuotes();
+                    } catch (err) {
+                        console.error("Errore eliminazione:", err);
+                    }
+                },
+
+                formatDate(timestamp) {
+                    return new Date(timestamp).toLocaleString(this.language === 'it' ? 'it-IT' : 'en-US', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
                 },
 
                 // 3D Viewer Logic
@@ -595,16 +670,14 @@
         </nav>
 
         <!-- Calculator View -->
-        <main class="max-w-7xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <!-- Colonna Input (8/12) -->
-            <div class="lg:col-span-8 space-y-6">
-                <!-- Header Sezione -->
+        <main class="max-w-[1600px] mx-auto px-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 items-start">
+            <!-- Colonna 1: Impostazioni e Input -->
+            <div class="space-y-6">
                 <div class="flex items-center justify-between mb-2">
                     <h2 class="text-2xl font-black dark:text-white tracking-tight" x-text="t('calc')"></h2>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- Material Section -->
+                <!-- Material Section -->
                     <section class="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
                         <h3 class="text-lg font-bold mb-4 dark:text-white flex items-center gap-2">
                             <div class="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
@@ -660,126 +733,104 @@
                                 <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1" x-text="t('minutes')"></label>
                                 <input type="number" x-model.number="printMinutes" min="0" max="59" class="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-lg font-black focus:ring-2 focus:ring-orange-500 outline-none">
                             </div>
-                        </div>
-                        <div class="mt-6 p-4 bg-orange-50 dark:bg-orange-900/10 rounded-2xl border border-orange-100 dark:border-orange-900/30">
-                            <p class="text-xs text-orange-700 dark:text-orange-300 italic text-center">
-                                Tip: Inserisci il tempo stimato dal tuo slicer (es. Bambu Studio, Cura).
-                            </p>
-                        </div>
-                    </section>
-                </div>
+                </section>
 
                 <!-- Economic Settings -->
-                <section class="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
-                    <h3 class="text-xl font-bold mb-6 dark:text-white flex items-center gap-2">
+                <section class="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <h3 class="text-lg font-bold mb-6 dark:text-white flex items-center gap-2">
                         <div class="p-2 bg-emerald-100 dark:bg-emerald-900 rounded-lg">
                             <svg class="w-5 h-5 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                         </div>
                         <span x-text="t('economic_section')"></span>
                     </h3>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2" x-text="t('printer_model')"></label>
-                                <div class="relative" @click.away="showPrinterDropdown = false">
-                                    <!-- Toggle Button -->
-                                    <button @click="showPrinterDropdown = !showPrinterDropdown" 
-                                            class="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-sm font-bold">
-                                        <span x-text="getSelectedPrinterName()"></span>
-                                        <svg class="w-4 h-4 transition-transform duration-200" :class="showPrinterDropdown ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                                    </button>
-
-                                    <!-- Dropdown Menu -->
-                                    <div x-show="showPrinterDropdown" 
-                                         x-transition:enter="transition ease-out duration-100"
-                                         x-transition:enter-start="opacity-0 scale-95"
-                                         x-transition:enter-end="opacity-100 scale-100"
-                                         class="absolute z-50 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden">
-                                        
-                                        <!-- Search inside dropdown -->
-                                        <div class="p-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
-                                            <div class="relative">
-                                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                                    <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                                                </div>
-                                                <input type="text" x-model="searchPrinter" :placeholder="t('search_placeholder')" 
-                                                       class="w-full pl-10 pr-3 py-2 bg-white dark:bg-gray-800 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-xs"
-                                                       @click.stop>
+                    <div class="space-y-6">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2" x-text="t('printer_model')"></label>
+                            <div class="relative" @click.away="showPrinterDropdown = false">
+                                <button @click="showPrinterDropdown = !showPrinterDropdown" 
+                                        class="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-sm font-bold">
+                                    <span x-text="getSelectedPrinterName()"></span>
+                                    <svg class="w-4 h-4 transition-transform duration-200" :class="showPrinterDropdown ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </button>
+                                <div x-show="showPrinterDropdown" 
+                                     x-transition:enter="transition ease-out duration-100"
+                                     x-transition:enter-start="opacity-0 scale-95"
+                                     x-transition:enter-end="opacity-100 scale-100"
+                                     class="absolute z-50 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden">
+                                    <div class="p-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
+                                        <div class="relative">
+                                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                                             </div>
+                                            <input type="text" x-model="searchPrinter" :placeholder="t('search_placeholder')" 
+                                                   class="w-full pl-10 pr-3 py-2 bg-white dark:bg-gray-800 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-xs"
+                                                   @click.stop>
                                         </div>
-
-                                        <!-- Options List -->
-                                        <div class="max-h-64 overflow-y-auto custom-scrollbar">
-                                            <template x-for="p in filteredPrinters" :key="p.id">
-                                                <button @click="selectedPrinter = p.id; updatePrinterPower()" 
-                                                        class="w-full text-left px-4 py-3 text-sm hover:bg-emerald-50 dark:hover:bg-emerald-900/20 border-b border-gray-50 dark:border-gray-700/50 last:border-0 transition-colors flex items-center justify-between group">
-                                                    <div>
-                                                        <span x-text="p.brand !== '--' ? p.brand + ' - ' : ''" class="text-gray-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400"></span>
-                                                        <span x-text="p.name" class="font-bold dark:text-white"></span>
-                                                    </div>
-                                                    <span x-text="p.watts + 'W'" class="text-[10px] bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-500"></span>
-                                                </button>
-                                            </template>
-                                        </div>
-                                        
-                                        <div class="p-2 bg-gray-50 dark:bg-gray-900/30 text-center">
-                                            <p class="text-[10px] text-gray-400 italic" x-text="t('search_hint')"></p>
-                                        </div>
+                                    </div>
+                                    <div class="max-h-64 overflow-y-auto custom-scrollbar">
+                                        <template x-for="p in filteredPrinters" :key="p.id">
+                                            <button @click="selectedPrinter = p.id; updatePrinterPower()" 
+                                                    class="w-full text-left px-4 py-3 text-sm hover:bg-emerald-50 dark:hover:bg-emerald-900/20 border-b border-gray-50 dark:border-gray-700/50 last:border-0 transition-colors flex items-center justify-between group">
+                                                <div>
+                                                    <span x-text="p.brand !== '--' ? p.brand + ' - ' : ''" class="text-gray-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400"></span>
+                                                    <span x-text="p.name" class="font-bold dark:text-white"></span>
+                                                </div>
+                                                <span x-text="p.watts + 'W'" class="text-[10px] bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-500"></span>
+                                            </button>
+                                        </template>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 gap-4">
-                            <div class="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1" x-text="t('avg_consumption')"></label>
-                                    <div class="relative">
-                                        <input type="number" x-model.number="printerWattage" :disabled="selectedPrinter !== 'custom'" :class="selectedPrinter !== 'custom' ? 'opacity-50' : ''" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold">
-                                        <span class="absolute right-3 top-2 text-gray-400 text-xs">W</span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1" x-text="t('kwh_cost')"></label>
-                                    <div class="relative">
-                                        <span class="absolute left-3 top-2 text-gray-400">€</span>
-                                        <input type="number" x-model.number="kwhCost" step="0.01" class="w-full pl-7 pr-3 py-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold">
-                                    </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1" x-text="t('avg_consumption')"></label>
+                                <div class="relative">
+                                    <input type="number" x-model.number="printerWattage" :disabled="selectedPrinter !== 'custom'" :class="selectedPrinter !== 'custom' ? 'opacity-50' : ''" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold">
+                                    <span class="absolute right-3 top-2 text-gray-400 text-xs">W</span>
                                 </div>
                             </div>
-
-                            <div class="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                                <div>
-                                    <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1" x-text="t('maintenance_cost')"></label>
-                                    <div class="relative">
-                                        <input type="number" x-model.number="maintenanceCost" step="1" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold">
-                                        <span class="absolute right-3 top-2 text-gray-400 text-xs">%</span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1" x-text="t('failure_rate')"></label>
-                                    <div class="relative">
-                                        <input type="number" x-model.number="failureRate" step="1" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold">
-                                        <span class="absolute right-3 top-2 text-gray-400 text-xs">%</span>
-                                    </div>
+                            <div>
+                                <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1" x-text="t('kwh_cost')"></label>
+                                <div class="relative">
+                                    <span class="absolute left-3 top-2 text-gray-400">€</span>
+                                    <input type="number" x-model.number="kwhCost" step="0.01" class="w-full pl-7 pr-3 py-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold">
                                 </div>
                             </div>
+                        </div>
 
-                            <div class="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                                <div>
-                                    <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1" x-text="t('profit_percent')"></label>
-                                    <div class="relative">
-                                        <input type="number" x-model.number="profitPercent" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold">
-                                        <span class="absolute right-3 top-2 text-gray-400 text-xs">%</span>
-                                    </div>
+                        <div class="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                            <div>
+                                <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1" x-text="t('maintenance_cost')"></label>
+                                <div class="relative">
+                                    <input type="number" x-model.number="maintenanceCost" step="1" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold">
+                                    <span class="absolute right-3 top-2 text-gray-400 text-xs">%</span>
                                 </div>
-                                <div>
-                                    <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1" x-text="t('iva_percent')"></label>
-                                    <div class="relative">
-                                        <input type="number" x-model.number="ivaPercent" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold">
-                                        <span class="absolute right-3 top-2 text-gray-400 text-xs">%</span>
-                                    </div>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1" x-text="t('failure_rate')"></label>
+                                <div class="relative">
+                                    <input type="number" x-model.number="failureRate" step="1" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold">
+                                    <span class="absolute right-3 top-2 text-gray-400 text-xs">%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                            <div>
+                                <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1" x-text="t('profit_percent')"></label>
+                                <div class="relative">
+                                    <input type="number" x-model.number="profitPercent" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold">
+                                    <span class="absolute right-3 top-2 text-gray-400 text-xs">%</span>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1" x-text="t('iva_percent')"></label>
+                                <div class="relative">
+                                    <input type="number" x-model.number="ivaPercent" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold">
+                                    <span class="absolute right-3 top-2 text-gray-400 text-xs">%</span>
                                 </div>
                             </div>
                         </div>
@@ -787,20 +838,28 @@
                 </section>
             </div>
 
-            <!-- Colonna Risultati (4/12) -->
-            <div class="lg:col-span-4 space-y-6 lg:sticky lg:top-6">
+            <!-- Colonna 2: Visualizzatore 3D e Storia -->
+            <div class="space-y-6">
                 <!-- 3D Viewer Section -->
-                <section class="bg-white dark:bg-gray-800 p-4 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden" 
+                <section class="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden" 
                          x-init="init3D()">
-                    <h3 class="text-sm font-bold mb-3 dark:text-white flex items-center gap-2 px-2">
-                        <div class="p-1.5 bg-blue-100 dark:bg-blue-900 rounded-lg">
-                            <svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg>
-                        </div>
-                        <span x-text="t('stl_viewer')"></span>
-                    </h3>
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-bold dark:text-white flex items-center gap-2">
+                            <div class="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
+                                <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg>
+                            </div>
+                            <span x-text="t('stl_viewer')"></span>
+                        </h3>
+                        <!-- Cute Upload Button -->
+                        <button @click="$refs.fileInput.click()" 
+                                class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-500/20 active:scale-95">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                            <span>STL</span>
+                        </button>
+                    </div>
                     
                     <div id="stl-container" 
-                         class="relative w-full h-64 bg-gray-50 dark:bg-gray-900 rounded-2xl border-2 border-dashed transition-all duration-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden"
+                         class="relative w-full h-[400px] bg-gray-50 dark:bg-gray-900 rounded-2xl border-2 border-dashed transition-all duration-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden"
                          :class="isDragging ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700'"
                          @dragover.prevent="isDragging = true"
                          @dragleave.prevent="isDragging = false"
@@ -813,12 +872,67 @@
                         <input type="file" x-ref="fileInput" class="hidden" accept=".stl" @change="handleFileSelect($event)">
                         
                         <div x-show="!hasModel" class="relative z-10 text-center p-6 pointer-events-none">
-                            <svg class="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-                            <p class="text-xs text-gray-400 font-medium" x-text="t('drop_stl')"></p>
+                            <svg class="w-16 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                            <p class="text-sm text-gray-400 font-medium" x-text="t('drop_stl')"></p>
                         </div>
                     </div>
                 </section>
 
+                <!-- Cloud History Section -->
+                <section class="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-lg font-bold dark:text-white flex items-center gap-2">
+                            <div class="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
+                                <svg class="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            </div>
+                            <span x-text="t('history')"></span>
+                        </h3>
+                        <button @click="fetchQuotes()" class="p-2 text-gray-400 hover:text-purple-500 transition-colors" :class="{ 'animate-spin': loadingQuotes }">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        </button>
+                    </div>
+
+                    <div class="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                        <template x-if="loadingQuotes">
+                            <div class="text-center py-8">
+                                <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-purple-500 border-t-transparent"></div>
+                            </div>
+                        </template>
+
+                        <template x-if="!loadingQuotes && quotes.length === 0">
+                            <div class="text-center py-10">
+                                <svg class="w-12 h-12 text-gray-200 dark:text-gray-700 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                                <p class="text-sm text-gray-400">Nessun preventivo salvato</p>
+                            </div>
+                        </template>
+
+                        <template x-for="quote in quotes" :key="quote.id">
+                            <div class="group bg-gray-50 dark:bg-gray-700/30 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-900 transition-all">
+                                <div class="flex justify-between items-start mb-2">
+                                    <div>
+                                        <h4 class="text-xs font-black text-purple-600 dark:text-purple-400 uppercase tracking-tighter" x-text="quote.printer"></h4>
+                                        <p class="text-[10px] text-gray-400" x-text="formatDate(quote.timestamp)"></p>
+                                    </div>
+                                    <button @click="deleteQuote(quote.id)" class="text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    </button>
+                                </div>
+                                <div class="flex justify-between items-end">
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">
+                                        <span x-text="quote.details.inputs.hours"></span>h 
+                                        <span x-text="quote.details.inputs.minutes"></span>m • 
+                                        <span x-text="quote.details.inputs.spools[0].grams"></span>g
+                                    </div>
+                                    <div class="text-lg font-black text-gray-900 dark:text-white" x-text="formatEuro(quote.finalPrice)"></div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Colonna 3: Riepilogo Costi (Sticky) -->
+            <div class="lg:sticky lg:top-6 space-y-6">
                 <section class="bg-gray-900 p-8 rounded-[2.5rem] text-white shadow-2xl flex flex-col relative overflow-hidden">
                     <!-- Sfondo Decorativo -->
                     <div class="absolute -right-20 -top-20 w-64 h-64 bg-blue-600/20 rounded-full blur-3xl"></div>
@@ -871,6 +985,24 @@
                         <div class="text-[10px] uppercase tracking-[0.3em] font-black text-blue-200 mb-3" x-text="t('final_price_label')"></div>
                         <div class="text-5xl sm:text-6xl font-black tracking-tighter" x-text="formatEuro(results.finalPrice)"></div>
                     </div>
+
+                    <!-- Cloud Save Button -->
+                    <button @click="saveQuote()" 
+                            :disabled="saving"
+                            class="w-full mt-6 py-4 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed border border-white/10 rounded-2xl flex items-center justify-center gap-3 transition-all group">
+                        <template x-if="!saving">
+                            <div class="flex items-center gap-3">
+                                <svg class="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                                <span class="font-bold text-sm uppercase tracking-wider" x-text="t('save')"></span>
+                            </div>
+                        </template>
+                        <template x-if="saving">
+                            <div class="flex items-center gap-3">
+                                <svg class="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                <span class="text-sm font-medium">Saving...</span>
+                            </div>
+                        </template>
+                    </button>
 
                     <p class="mt-8 text-[9px] text-gray-500 uppercase tracking-widest text-center" x-text="t('footer_note')"></p>
                 </section>
