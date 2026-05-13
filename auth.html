@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Login - 3D Quote Master</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+    
+    <script src="js/firebase-config.js"></script>
+    <script src="js/auth-service.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+    <div x-data="{ 
+        view: 'login', 
+        email: '', 
+        password: '', 
+        username: '',
+        loading: false,
+        error: '',
+        
+        async handleGoogle() {
+            this.loading = true;
+            try {
+                await AuthService.loginWithGoogle();
+                window.location.href = 'index.html';
+            } catch (e) { this.error = e.message; }
+            this.loading = false;
+        },
+
+        async handleEmailAction() {
+            this.loading = true;
+            this.error = '';
+            try {
+                if(this.view === 'login') {
+                    await AuthService.loginWithEmail(this.email, this.password);
+                } else {
+                    await AuthService.registerWithEmail(this.email, this.password, this.username);
+                }
+                window.location.href = 'index.html';
+            } catch (e) { this.error = e.message; }
+            this.loading = false;
+        }
+    }" class="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+        
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-blue-600">3D Quote Master</h1>
+            <p class="text-gray-500 mt-2" x-text="view === 'login' ? 'Accedi al tuo account' : 'Crea un nuovo account'"></p>
+        </div>
+
+        <!-- Google Login -->
+        <button @click="handleGoogle()" :disabled="loading" class="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition duration-200 mb-6 font-medium text-gray-700">
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-1 .67-2.28 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 12-4.53z"/>
+            </svg>
+            Continua con Google
+        </button>
+
+        <div class="relative flex items-center justify-center mb-6">
+            <hr class="w-full border-gray-200">
+            <span class="absolute px-3 bg-white text-xs text-gray-400 uppercase">oppure email</span>
+        </div>
+
+        <!-- Error Message -->
+        <div x-show="error" x-text="error" class="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100"></div>
+
+        <!-- Email Form -->
+        <form @submit.prevent="handleEmailAction()" class="space-y-4">
+            <div x-show="view === 'register'">
+                <label class="block text-sm font-medium text-gray-700">Username</label>
+                <input type="text" x-model="username" :required="view === 'register'" class="w-full mt-1 p-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Email</label>
+                <input type="email" x-model="email" required class="w-full mt-1 p-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Password</label>
+                <input type="password" x-model="password" required class="w-full mt-1 p-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            
+            <button type="submit" :disabled="loading" class="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition duration-200 flex items-center justify-center">
+                <svg x-show="loading" class="animate-spin h-5 w-5 mr-3 text-white" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                <span x-text="view === 'login' ? 'Accedi' : 'Registrati'"></span>
+            </button>
+        </form>
+
+        <div class="mt-6 text-center">
+            <button @click="view = (view === 'login' ? 'register' : 'login')" class="text-sm text-blue-600 hover:underline" x-text="view === 'login' ? 'Non hai un account? Registrati' : 'Hai già un account? Accedi'"></button>
+        </div>
+    </div>
+</body>
+</html>

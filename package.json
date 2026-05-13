@@ -1,0 +1,12 @@
+{
+  "name": "3d-print-quote-master",
+  "version": "1.0.0",
+  "description": "Calcolatore preventivi 3D professionale",
+  "main": "index.html",
+  "scripts": {
+    "build": "node generate-config.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}

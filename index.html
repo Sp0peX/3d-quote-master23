@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="it" x-data="mainApp()" :class="{ 'dark': darkMode }">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title x-text="t('app_title')">3D-Print Quote Master</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+
+    <!-- Project Scripts -->
+    <script src="js/firebase-config.js"></script>
+    <script src="js/calc-service.js"></script>
+    <script src="js/auth-service.js"></script>
+    <script src="js/db-service.js"></script>
+
+    <script>
+        tailwind.config = { darkMode: 'class' }
+
+        function mainApp() {
+            return {
+                // UI State
+                showAbout: false,
+                darkMode: localStorage.getItem('darkMode') === 'true',
+                language: localStorage.getItem('language') || 'it',
+                user: null,
+                searchPrinter: '',
+
+                // Calculator Data
+                spools: [{ costPerKg: 23.00, grams: 170 }],
+                printHours: 4,
+                printMinutes: 0,
+                selectedPrinter: 'X1-Carbon / X1-C',
+                printerWattage: 120,
+                kwhCost: 0.33,
+                profitPercent: 30,
+                ivaPercent: 22,
+                printerBrands: CalcService.printerBrands,
+
+                init() {
+                    // Controllo Autenticazione
+                    AuthService.onAuthStateChanged(user => {
+                        if (!user) {
+                            window.location.href = 'auth.html';
+                        } else {
+                            this.user = user;
+                        }
+                    });
+
+                    this.$watch('language', value => localStorage.setItem('language', value));
+                    this.$watch('darkMode', value => {
+                        localStorage.setItem('darkMode', value);
+                        document.documentElement.classList.toggle('dark', value);
+                    });
+                },
+
+                // Getters (Utilizzano il CalcService "backend")
+                get results() {
+                    return CalcService.generateQuote({
+                        spools: this.spools,
+                        hours: this.printHours,
+                        minutes: this.printMinutes,
+                        wattage: this.printerWattage,
+                        kwhCost: this.kwhCost,
+                        ivaPercent: this.ivaPercent,
+                        profitPercent: this.profitPercent
+                    });
+                },
+
+                // Actions
+                addSpool() { this.spools.push({ costPerKg: 20.00, grams: 0 }); },
+                removeSpool(index) { this.spools.splice(index, 1); },
+                
+                filteredBrands() {
+                    if (!this.searchPrinter) return Object.keys(this.printerBrands);
+                    return Object.keys(this.printerBrands).filter(brand => {
+                        return brand.toLowerCase().includes(this.searchPrinter.toLowerCase()) || 
+                               this.printerBrands[brand].some(p => p.name.toLowerCase().includes(this.searchPrinter.toLowerCase()));
+                    });
+                },
+
+                updatePrinterPower() {
+                    if (this.selectedPrinter !== 'custom') {
+                        for (let brand in this.printerBrands) {
+                            const p = this.printerBrands[brand].find(x => x.name === this.selectedPrinter);
+                            if (p) { this.printerWattage = p.watts; break; }
+                        }
+                    }
+                },
+
+                formatEuro(value) {
+                    const lang = this.language === 'en' ? 'en-US' : 'it-IT';
+                    return new Intl.NumberFormat(lang, { 
+                        style: 'currency', 
+                        currency: 'EUR' 
+                    }).format(value || 0);
+                },
+                
+                translations: {
+                    it: {
+                        app_title: '3D-Print Quote Master Pro',
+                        app_subtitle: 'Calcola il costo totale inclusi materiali, energia, IVA e profitto',
+                        about_title: 'Informazioni sul Progetto',
+                        about_slogan: 'Dalla bobina al profitto: calcola il prezzo perfetto per ogni tua stampa.',
+                        about_desc_1: '3D-Print Quote Master è l\'applicazione definitiva per professionisti e hobbisti che desiderano gestire i propri costi con precisione chirurgica.',
+                        features_title: 'Caratteristiche Principali:',
+                        feature_1: 'Database di oltre 150 stampanti con consumi reali.',
+                        feature_2: 'Gestione multi-bobina e multi-materiale.',
+                        feature_3: 'Calcolo energetico avanzato (Watt/kWh).',
+                        feature_4: 'Logica di business con IVA e margini di profitto.',
+                        close: 'Chiudi',
+                        material_section: 'Materiale (Bobine)',
+                        cost_per_kg: 'Costo al KG (€)',
+                        grams_used: 'Grammi Usati (g)',
+                        add_spool: 'Aggiungi Bobina',
+                        time_section: 'Tempo di Stampa',
+                        hours: 'Ore',
+                        minutes: 'Minuti',
+                        economic_section: 'Impostazioni Economiche',
+                        printer_model: 'Modello Stampante',
+                        search_placeholder: 'Cerca stampante...',
+                        custom_printer: '-- Altro (Personalizzato) --',
+                        search_hint: 'Usa la barra sopra per filtrare tra oltre 150 modelli.',
+                        avg_consumption: 'Consumo Medio (W)',
+                        kwh_cost: 'Costo Corrente (€/kWh)',
+                        hourly_cost_calc: 'Costo orario calcolato:',
+                        maintenance_cost: 'Manutenzione (€/h)',
+                        labor_rate: 'Manodopera (€/h)',
+                        prep_cost: 'Costo Prep. Fisso (€)',
+                        failure_rate: 'Scarti/Fallimenti (%)',
+                        profit_percent: 'Guadagno (%)',
+                        iva_percent: 'IVA (%)',
+                        summary_title: 'Riepilogo Costi',
+                        material_cost: 'Costo Materiale:',
+                        energy_cost: 'Costo Energia:',
+                        machine_cost: 'Usura Macchina:',
+                        labor_cost: 'Lavoro/Prep:',
+                        failure_impact: 'Incidenza Fallimenti:',
+                        total_without_profit: 'Totale Senza Ricavo:',
+                        iva: 'IVA',
+                        price_with_iva: 'Prezzo Ivato:',
+                        profit: 'Guadagno',
+                        final_price_label: 'Prezzo Finale Consigliato',
+                        footer_note: '* Calcolo basato sulla logica cloud di Firebase.',
+                        logout: 'Logout',
+                        history: 'Storico Cloud',
+                        calc: 'Calcolatore',
+                        save: 'Salva nel Cloud',
+                        confirm_delete_quote: 'Sei sicuro di voler eliminare questo preventivo?',
+                        admin_panel: 'Pannello Admin',
+                        total_users: 'Utenti Totali',
+                        total_quotes: 'Preventivi Totali',
+                        all_users: 'Lista Utenti',
+                        all_quotes: 'Tutti i Preventivi',
+                        role: 'Ruolo',
+                        change_role: 'Cambia Ruolo'
+                    },
+                    en: {
+                        app_title: '3D-Print Quote Master Pro',
+                        app_subtitle: 'Calculate total cost including materials, energy, VAT and profit',
+                        about_title: 'Project Information',
+                        about_slogan: 'From spool to profit: calculate the perfect price for every print.',
+                        about_desc_1: '3D-Print Quote Master is the ultimate tool for professionals and hobbyists to manage costs with surgical precision.',
+                        features_title: 'Key Features:',
+                        feature_1: 'Database of 150+ printers with real consumption data.',
+                        feature_2: 'Multi-spool and multi-material management.',
+                        feature_3: 'Advanced energy calculation (Watts/kWh).',
+                        feature_4: 'Business logic with VAT and profit margins.',
+                        close: 'Close',
+                        material_section: 'Material (Spools)',
+                        cost_per_kg: 'Cost per KG (€)',
+                        grams_used: 'Grams Used (g)',
+                        add_spool: 'Add Spool',
+                        time_section: 'Print Time',
+                        hours: 'Hours',
+                        minutes: 'Minutes',
+                        economic_section: 'Economic Settings',
+                        printer_model: 'Printer Model',
+                        search_placeholder: 'Search printer...',
+                        custom_printer: '-- Other (Custom) --',
+                        search_hint: 'Use the search bar above to filter through 150+ models.',
+                        avg_consumption: 'Avg Consumption (W)',
+                        kwh_cost: 'Electricity Cost (€/kWh)',
+                        hourly_cost_calc: 'Calculated hourly cost:',
+                        maintenance_cost: 'Maintenance (€/h)',
+                        labor_rate: 'Labor Rate (€/h)',
+                        prep_cost: 'Fixed Prep Cost (€)',
+                        failure_rate: 'Failure Rate (%)',
+                        profit_percent: 'Profit (%)',
+                        iva_percent: 'VAT (%)',
+                        summary_title: 'Cost Summary',
+                        material_cost: 'Material Cost:',
+                        energy_cost: 'Energy Cost:',
+                        machine_cost: 'Machine Wear:',
+                        labor_cost: 'Labor/Prep:',
+                        failure_impact: 'Failure Impact:',
+                        total_without_profit: 'Total Without Profit:',
+                        iva: 'VAT',
+                        price_with_iva: 'Price with VAT:',
+                        profit: 'Profit',
+                        final_price_label: 'Recommended Final Price',
+                        footer_note: '* Calculation based on Firebase cloud logic.',
+                        logout: 'Logout',
+                        history: 'Cloud History',
+                        calc: 'Calculator',
+                        save: 'Save to Cloud',
+                        confirm_delete_quote: 'Are you sure you want to delete this quote?',
+                        admin_panel: 'Admin Panel',
+                        total_users: 'Total Users',
+                        total_quotes: 'Total Quotes',
+                        all_users: 'User List',
+                        all_quotes: 'All Quotes',
+                        role: 'Role',
+                        change_role: 'Change Role'
+                    },
+                    fr: {
+                        app_title: '3D-Print Quote Master Pro',
+                        app_subtitle: 'Calculez le coût total incluant matériaux, énergie, TVA et profit',
+                        about_title: 'Informations sur le Projet',
+                        about_slogan: 'De la bobine au profit: calculez le prix parfait pour chaque impression.',
+                        about_desc_1: '3D-Print Quote Master est l\'outil ultime pour les professionnels et les hobbistes afin di gérer les coûts con une précision chirurgicale.',
+                        features_title: 'Caractéristiques Principales:',
+                        feature_1: 'Base de données di 150+ imprimantes con consommation réelle.',
+                        feature_2: 'Gestion multi-bobines et multi-matériaux.',
+                        feature_3: 'Calcul énergétique avancé (Watts/kWh).',
+                        feature_4: 'Logique métier con TVA et marges bénéficiaires.',
+                        close: 'Fermer',
+                        material_section: 'Matériau (Bobines)',
+                        cost_per_kg: 'Coût par KG (€)',
+                        grams_used: 'Grammes Utilisés (g)',
+                        add_spool: 'Ajouter une Bobine',
+                        time_section: 'Temps d\'Impression',
+                        hours: 'Heures',
+                        minutes: 'Minutes',
+                        economic_section: 'Paramètres Économiques',
+                        printer_model: 'Modèle d\'Imprimante',
+                        search_placeholder: 'Rechercher une imprimante...',
+                        custom_printer: '-- Autre (Personnalisé) --',
+                        search_hint: 'Utilisez la barre de recherche pour filtrer parmi 150+ modèles.',
+                        avg_consumption: 'Consommation Moyenne (W)',
+                        kwh_cost: 'Coût de l\'Électricité (€/kWh)',
+                        hourly_cost_calc: 'Coût horaire calculé:',
+                        maintenance_cost: 'Maintenance (€/h)',
+                        labor_rate: 'Main d\'œuvre (€/h)',
+                        prep_cost: 'Coût de Préparation (€)',
+                        failure_rate: 'Taux d\'échec (%)',
+                        profit_percent: 'Marge (%)',
+                        iva_percent: 'TVA (%)',
+                        summary_title: 'Résumé des Coûts',
+                        material_cost: 'Coût du Matériau:',
+                        energy_cost: 'Coût de l\'Énergie:',
+                        machine_cost: 'Usure Machine:',
+                        labor_cost: 'Travail/Prep:',
+                        failure_impact: 'Impact des échecs:',
+                        total_without_profit: 'Total Sans Profit:',
+                        iva: 'TVA',
+                        price_with_iva: 'Prix TTC:',
+                        profit: 'Profit',
+                        final_price_label: 'Prix Final Recommandé',
+                        footer_note: '* Calcul basé sur la logique cloud Firebase.',
+                        logout: 'Déconnexion',
+                        history: 'Historique Cloud',
+                        calc: 'Calculateur',
+                        save: 'Enregistrer',
+                        confirm_delete_quote: 'Supprimer ce devis ?'
+                    },
+                    es: {
+                        app_title: '3D-Print Quote Master Pro',
+                        app_subtitle: 'Calcule el coste total incluyendo materiales, energía, IVA y beneficio',
+                        about_title: 'Información del Proyecto',
+                        about_slogan: 'De la bobina al beneficio: calcule el precio perfecto para cada impresión.',
+                        about_desc_1: '3D-Print Quote Master es la herramienta definitiva para profesionales y aficionados para gestionar costes con precisión quirúrgica.',
+                        features_title: 'Características Principales:',
+                        feature_1: 'Base de datos de più di 150 impresoras con consumo real.',
+                        feature_2: 'Gestión multibobina e multimaterial.',
+                        feature_3: 'Cálculo energético avanzado (Vatios/kWh).',
+                        feature_4: 'Lógica de negocio con IVA y márgenes de beneficio.',
+                        close: 'Cerrar',
+                        material_section: 'Material (Bobinas)',
+                        cost_per_kg: 'Coste por KG (€)',
+                        grams_used: 'Gramos Usados (g)',
+                        add_spool: 'Añadir Bobina',
+                        time_section: 'Tiempo de Impresión',
+                        hours: 'Horas',
+                        minutes: 'Minutos',
+                        economic_section: 'Ajustes Económicos',
+                        printer_model: 'Modelo de Impresora',
+                        search_placeholder: 'Buscar impresora...',
+                        custom_printer: '-- Otro (Personalizado) --',
+                        search_hint: 'Use la barra de búsqueda para filtrar entre más de 150 modelos.',
+                        avg_consumption: 'Consumo Medio (W)',
+                        kwh_cost: 'Coste de Electricidad (€/kWh)',
+                        hourly_cost_calc: 'Coste por hora calculado:',
+                        maintenance_cost: 'Mantenimiento (€/h)',
+                        labor_rate: 'Mano de obra (€/h)',
+                        prep_cost: 'Coste de Prep. Fijo (€)',
+                        failure_rate: 'Tasa de fallos (%)',
+                        profit_percent: 'Beneficio (%)',
+                        iva_percent: 'IVA (%)',
+                        summary_title: 'Resumen de Costes',
+                        material_cost: 'Coste de Material:',
+                        energy_cost: 'Coste de Energía:',
+                        machine_cost: 'Desgaste Máquina:',
+                        labor_cost: 'Trabajo/Prep:',
+                        failure_impact: 'Impacto de fallos:',
+                        total_without_profit: 'Total Sin Beneficio:',
+                        iva: 'IVA',
+                        price_with_iva: 'Precio con IVA:',
+                        profit: 'Beneficio',
+                        final_price_label: 'Precio Final Recomendado',
+                        footer_note: '* Cálculo basado en la lógica cloud de Firebase.',
+                        logout: 'Cerrar sesión',
+                        history: 'Historial Cloud',
+                        calc: 'Calculadora',
+                        save: 'Guardar en Cloud',
+                        confirm_delete_quote: '¿Eliminar este presupuesto?'
+                    },
+                    de: {
+                        app_title: '3D-Print Quote Master Pro',
+                        app_subtitle: 'Berechnen Sie die Gesamtkosten inkl. Material, Energie, MwSt. und Gewinn',
+                        about_title: 'Projektinformationen',
+                        about_slogan: 'Von der Spule zum Gewinn: Berechnen Sie den perfekten Preis für jeden Druck.',
+                        about_desc_1: '3D-Print Quote Master ist das ultimative Tool für Profis und Hobbyisten, um Kosten mit chirurgischer Präzision zu verwalten.',
+                        features_title: 'Hauptmerkmale:',
+                        feature_1: 'Datenbank mit 150+ Druckern mit realem Verbrauch.',
+                        feature_2: 'Multi-Spulen- und Multi-Material-Verwaltung.',
+                        feature_3: 'Fortschrittliche Energieberechnung (Watt/kWh).',
+                        feature_4: 'Business-Logik mit MwSt. und Gewinnmargen.',
+                        close: 'Schließen',
+                        material_section: 'Material (Spulen)',
+                        cost_per_kg: 'Kosten pro KG (€)',
+                        grams_used: 'Verbrauchte Gramm (g)',
+                        add_spool: 'Spule hinzufügen',
+                        time_section: 'Druckzeit',
+                        hours: 'Stunden',
+                        minutes: 'Minuten',
+                        economic_section: 'Wirtschaftliche Einstellungen',
+                        printer_model: 'Druckermodell',
+                        search_placeholder: 'Drucker suchen...',
+                        custom_printer: '-- Anderes (Benutzerdefiniert) --',
+                        search_hint: 'Verwenden Sie die Suchleiste oben, um durch 150+ Modelle zu filtern.',
+                        avg_consumption: 'Durchschn. Verbrauch (W)',
+                        kwh_cost: 'Stromkosten (€/kWh)',
+                        hourly_cost_calc: 'Berechnete Stundenkosten:',
+                        maintenance_cost: 'Wartung (€/h)',
+                        labor_rate: 'Arbeitskosten (€/h)',
+                        prep_cost: 'Feste Vorber.-Kosten (€)',
+                        failure_rate: 'Fehlerrate (%)',
+                        profit_percent: 'Gewinn (%)',
+                        iva_percent: 'MwSt. (%)',
+                        summary_title: 'Kostenübersicht',
+                        material_cost: 'Materialkosten:',
+                        energy_cost: 'Energiekosten:',
+                        machine_cost: 'Maschinenverschleiß:',
+                        labor_cost: 'Arbeit/Vorbereitung:',
+                        failure_impact: 'Fehlerauswirkung:',
+                        total_without_profit: 'Gesamt ohne Gewinn:',
+                        iva: 'MwSt.',
+                        price_with_iva: 'Preis inkl. MwSt.:',
+                        profit: 'Gewinn',
+                        final_price_label: 'Empfohlener Endpreis',
+                        footer_note: '* Berechnung basiert auf Firebase Cloud-Logik.',
+                        logout: 'Abmelden',
+                        history: 'Cloud-Verlauf',
+                        calc: 'Rechner',
+                        save: 'Cloud speichern',
+                        confirm_delete_quote: 'Diesen Kostenvoranschlag löschen?'
+                    }
+                },
+                t(key) { return this.translations[this.language]?.[key] || this.translations['it'][key] || key; }
+            }
+        }
+    </script>
+    <style> [x-cloak] { display: none !important; } </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 min-h-screen transition-colors duration-200" x-cloak>
+    <div class="pb-10">
+        <!-- Navbar -->
+        <nav class="max-w-6xl mx-auto px-4 py-6 flex justify-between items-center">
+            <div class="flex items-center gap-6">
+                <h1 class="text-2xl font-bold text-blue-600 dark:text-blue-400" x-text="t('app_title')"></h1>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <!-- Language Selector -->
+                <select x-model="language" class="bg-white dark:bg-gray-800 dark:text-white border-gray-300 dark:border-gray-700 rounded-md text-sm p-1 focus:ring-blue-500 outline-none">
+                    <option value="it">🇮🇹 IT</option>
+                    <option value="en">🇺🇸 EN</option>
+                    <option value="fr">🇫🇷 FR</option>
+                    <option value="es">🇪🇸 ES</option>
+                    <option value="de">🇩🇪 DE</option>
+                </select>
+
+                <div class="text-right hidden sm:block">
+                    <p class="text-xs font-bold dark:text-white" x-text="user?.displayName || user?.email"></p>
+                </div>
+
+                <button @click="showAbout = true" class="p-2 rounded-full bg-white dark:bg-gray-800 shadow-md text-blue-600 dark:text-blue-400 hover:bg-gray-50 transition">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </button>
+
+                <button @click="AuthService.logout()" class="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition" :title="t('logout')">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                </button>
+
+                <button @click="darkMode = !darkMode" class="p-2 text-gray-500 dark:text-gray-400">
+                    <svg x-show="!darkMode" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                    <svg x-show="darkMode" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                </button>
+            </div>
+        </nav>
+
+        <!-- Calculator View -->
+        <main class="max-w-6xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Colonna Input -->
+            <div class="space-y-6">
+                <!-- Material Section -->
+                <section class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <h2 class="text-xl font-bold mb-4 dark:text-white flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                        <span x-text="t('material_section')"></span>
+                    </h2>
+                    <template x-for="(spool, index) in spools" :key="index">
+                        <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-xl mb-3 border border-gray-100 dark:border-gray-600 relative group">
+                            <button @click="removeSpool(index)" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-600 z-10" x-show="spools.length > 1" title="Rimuovi bobina">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-500 mb-1" x-text="t('cost_per_kg')"></label>
+                                    <input type="number" x-model.number="spool.costPerKg" step="0.01" class="w-full p-2 bg-white dark:bg-gray-800 dark:text-white border border-gray-200 dark:border-gray-600 rounded-lg">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-500 mb-1" x-text="t('grams_used')"></label>
+                                    <input type="number" x-model.number="spool.grams" step="1" class="w-full p-2 bg-white dark:bg-gray-800 dark:text-white border border-gray-200 dark:border-gray-600 rounded-lg">
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                    <button @click="addSpool()" class="w-full py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg border-2 border-dashed border-blue-100 dark:border-blue-800 hover:bg-blue-100 transition flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                        <span x-text="t('add_spool')"></span>
+                    </button>
+                </section>
+
+                <!-- Time Section -->
+                <section class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <h2 class="text-xl font-bold mb-4 dark:text-white flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <span x-text="t('time_section')"></span>
+                    </h2>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1" x-text="t('hours')"></label>
+                            <input type="number" x-model.number="printHours" min="0" class="w-full p-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1" x-text="t('minutes')"></label>
+                            <input type="number" x-model.number="printMinutes" min="0" max="59" class="w-full p-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-lg">
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Economic Settings -->
+                <section class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <h2 class="text-xl font-bold mb-4 dark:text-white flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        <span x-text="t('economic_section')"></span>
+                    </h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1" x-text="t('printer_model')"></label>
+                            <div class="relative">
+                                <input type="text" x-model="searchPrinter" :placeholder="t('search_placeholder')" class="w-full p-2 mb-1 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
+                                <select x-model="selectedPrinter" @change="updatePrinterPower()" class="w-full p-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-lg h-40" size="5">
+                                    <option value="custom" x-text="t('custom_printer')"></option>
+                                    <template x-for="brand in filteredBrands()" :key="brand">
+                                        <optgroup :label="brand">
+                                            <template x-for="p in printerBrands[brand]" :key="p.name">
+                                                <option :value="p.name" x-text="p.name" x-show="p.name.toLowerCase().includes(searchPrinter.toLowerCase())"></option>
+                                            </template>
+                                        </optgroup>
+                                    </template>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" x-text="t('avg_consumption')"></label>
+                                <input type="number" x-model.number="printerWattage" :disabled="selectedPrinter !== 'custom'" :class="selectedPrinter !== 'custom' ? 'opacity-50' : ''" class="w-full p-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-lg">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" x-text="t('kwh_cost')"></label>
+                                <input type="number" x-model.number="kwhCost" step="0.01" class="w-full p-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-lg">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" x-text="t('profit_percent')"></label>
+                                <input type="number" x-model.number="profitPercent" class="w-full p-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-lg">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" x-text="t('iva_percent')"></label>
+                                <input type="number" x-model.number="ivaPercent" class="w-full p-2 bg-gray-50 dark:bg-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 rounded-lg">
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Colonna Risultati -->
+            <div class="space-y-6">
+                <section class="bg-blue-600 p-8 rounded-3xl text-white shadow-xl flex flex-col min-h-[400px]">
+                    <h2 class="text-2xl font-bold mb-8 border-b border-white/20 pb-4" x-text="t('summary_title')"></h2>
+                    
+                    <div class="flex-grow space-y-6">
+                        <div class="flex justify-between items-center">
+                            <span class="opacity-80" x-text="t('material_cost')"></span>
+                            <span class="text-2xl font-bold" x-text="formatEuro(results.materialCost)"></span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="opacity-80" x-text="t('energy_cost')"></span>
+                            <span class="text-2xl font-bold" x-text="formatEuro(results.energyCost)"></span>
+                        </div>
+                        <div class="flex justify-between items-center pt-4 border-t border-white/20">
+                            <span class="font-bold text-lg" x-text="t('total_without_profit')"></span>
+                            <span class="text-2xl font-black" x-text="formatEuro(results.basePrice)"></span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="opacity-80"><span x-text="t('iva')"></span> (<span x-text="ivaPercent"></span>%)</span>
+                            <span class="text-xl font-bold" x-text="'+ ' + formatEuro(results.ivaAmount)"></span>
+                        </div>
+                        <div class="flex justify-between items-center pt-4 border-t border-white/20">
+                            <span class="font-bold text-lg" x-text="t('price_with_iva')"></span>
+                            <span class="text-2xl font-black" x-text="formatEuro(results.priceWithIva)"></span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="opacity-80"><span x-text="t('profit')"></span> (<span x-text="profitPercent"></span>%)</span>
+                            <span class="text-xl font-bold" x-text="'+ ' + formatEuro(results.profitAmount)"></span>
+                        </div>
+                    </div>
+
+                    <div class="mt-12 bg-white/10 p-8 rounded-2xl border border-white/20">
+                        <div class="text-sm uppercase tracking-widest opacity-80 mb-2" x-text="t('final_price_label')"></div>
+                        <div class="text-6xl font-black" x-text="formatEuro(results.finalPrice)"></div>
+                    </div>
+
+                    <p class="mt-6 text-[10px] opacity-60 italic text-center" x-text="t('footer_note')"></p>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- About Modal -->
+    <div x-show="showAbout" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="showAbout" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showAbout = false"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div x-show="showAbout" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-2xl px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                <div>
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900">
+                        <svg class="h-6 w-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <div class="mt-3 text-center sm:mt-5">
+                        <h3 class="text-xl leading-6 font-bold text-gray-900 dark:text-white" id="modal-title" x-text="t('about_title')"></h3>
+                        <div class="mt-4 text-sm text-gray-500 dark:text-gray-300 space-y-4 text-left">
+                            <p class="font-semibold italic text-center text-blue-600 dark:text-blue-400" x-text="t('about_slogan')"></p>
+                            <p x-text="t('about_desc_1')"></p>
+                            <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-xl border border-gray-200 dark:border-gray-600">
+                                <h4 class="font-bold mb-2 text-gray-700 dark:text-gray-200" x-text="t('features_title')"></h4>
+                                <ul class="list-disc list-inside space-y-1">
+                                    <li x-text="t('feature_1')"></li>
+                                    <li x-text="t('feature_2')"></li>
+                                    <li x-text="t('feature_3')"></li>
+                                    <li x-text="t('feature_4')"></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-8 sm:mt-10">
+                    <button type="button" class="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition" @click="showAbout = false" x-text="t('close')"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
