@@ -10,9 +10,9 @@
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     
     <!-- Three.js for 3D Rendering -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/STLLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
@@ -27,6 +27,15 @@
 
     <script>
         tailwind.config = { darkMode: 'class' }
+
+        // Three.js State (Non-reactive to avoid Proxy issues with Alpine.js)
+        const threeState = {
+            scene: null,
+            camera: null,
+            renderer: null,
+            controls: null,
+            currentMesh: null
+        };
 
         function mainApp() {
             return {
@@ -149,52 +158,63 @@
 
                 // 3D Viewer Logic
                 init3D() {
+                    console.log("Inizializzazione 3D...");
                     const container = document.getElementById('stl-container');
                     if (!container) return;
 
-                    this.scene = new THREE.Scene();
-                    this.scene.background = new THREE.Color(this.darkMode ? 0x111827 : 0xf3f4f6);
-                    
-                    this.camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
-                    this.camera.position.set(0, 0, 100);
+                    try {
+                        threeState.scene = new THREE.Scene();
+                        threeState.scene.background = new THREE.Color(this.darkMode ? 0x111827 : 0xf3f4f6);
+                        
+                        threeState.camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+                        threeState.camera.position.set(50, 50, 50);
 
-                    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-                    this.renderer.setSize(container.clientWidth, container.clientHeight);
-                    this.renderer.setPixelRatio(window.devicePixelRatio);
-                    container.appendChild(this.renderer.domElement);
+                        threeState.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                        threeState.renderer.setSize(container.clientWidth, container.clientHeight);
+                        threeState.renderer.setPixelRatio(window.devicePixelRatio);
+                        
+                        container.innerHTML = '';
+                        container.appendChild(threeState.renderer.domElement);
 
-                    // Lights
-                    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-                    this.scene.add(ambientLight);
-                    const pointLight = new THREE.PointLight(0xffffff, 1);
-                    this.camera.add(pointLight);
-                    this.scene.add(this.camera);
+                        // Lights
+                        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                        threeState.scene.add(ambientLight);
+                        
+                        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                        dirLight.position.set(1, 1, 1).normalize();
+                        threeState.scene.add(dirLight);
 
-                    // Controls
-                    this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
-                    this.controls.enableDamping = true;
+                        // Controls
+                        threeState.controls = new THREE.OrbitControls(threeState.camera, threeState.renderer.domElement);
+                        threeState.controls.enableDamping = true;
 
-                    // Animation Loop
-                    const animate = () => {
-                        requestAnimationFrame(animate);
-                        this.controls.update();
-                        this.renderer.render(this.scene, this.camera);
-                    };
-                    animate();
+                        // Animation Loop
+                        const animate = () => {
+                            requestAnimationFrame(animate);
+                            if (threeState.controls) threeState.controls.update();
+                            if (threeState.renderer && threeState.scene && threeState.camera) {
+                                threeState.renderer.render(threeState.scene, threeState.camera);
+                            }
+                        };
+                        animate();
 
-                    // Resize Observer
-                    const resizeObserver = new ResizeObserver(() => {
-                        if (container.clientWidth > 0) {
-                            this.camera.aspect = container.clientWidth / container.clientHeight;
-                            this.camera.updateProjectionMatrix();
-                            this.renderer.setSize(container.clientWidth, container.clientHeight);
-                        }
-                    });
-                    resizeObserver.observe(container);
-                    
-                    this.$watch('darkMode', value => {
-                        this.scene.background = new THREE.Color(value ? 0x111827 : 0xf3f4f6);
-                    });
+                        // Resize Observer
+                        const resizeObserver = new ResizeObserver(() => {
+                            if (container.clientWidth > 0 && threeState.camera && threeState.renderer) {
+                                threeState.camera.aspect = container.clientWidth / container.clientHeight;
+                                threeState.camera.updateProjectionMatrix();
+                                threeState.renderer.setSize(container.clientWidth, container.clientHeight);
+                            }
+                        });
+                        resizeObserver.observe(container);
+                        
+                        this.$watch('darkMode', value => {
+                            if (threeState.scene) threeState.scene.background = new THREE.Color(value ? 0x111827 : 0xf3f4f6);
+                        });
+                        console.log("3D Inizializzato!");
+                    } catch (err) {
+                        console.error("Errore 3D:", err);
+                    }
                 },
 
                 handleFileSelect(event) {
@@ -205,46 +225,54 @@
                 handleDrop(event) {
                     this.isDragging = false;
                     const file = event.dataTransfer.files[0];
-                    if (file && file.name.toLowerCase().endsWith('.stl')) {
-                        this.loadSTL(file);
-                    }
+                    if (file && file.name.toLowerCase().endsWith('.stl')) this.loadSTL(file);
                 },
 
                 loadSTL(file) {
+                    if (!threeState.scene) return;
+                    
+                    // Controllo dimensione file (Max 50MB per stabilità browser)
+                    if (file.size > 50 * 1024 * 1024) {
+                        alert("Il file è troppo grande (Max 50MB).");
+                        return;
+                    }
+
                     const reader = new FileReader();
                     reader.onload = (e) => {
-                        const loader = new THREE.STLLoader();
-                        const geometry = loader.parse(e.target.result);
-                        
-                        // Clear previous mesh
-                        if (this.currentMesh) this.scene.remove(this.currentMesh);
+                        try {
+                            const loader = new THREE.STLLoader();
+                            const geometry = loader.parse(e.target.result);
+                            
+                            if (threeState.currentMesh) threeState.scene.remove(threeState.currentMesh);
 
-                        const material = new THREE.MeshPhongMaterial({ 
-                            color: 0x3b82f6, 
-                            specular: 0x111111, 
-                            shininess: 200 
-                        });
-                        this.currentMesh = new THREE.Mesh(geometry, material);
-                        
-                        // Center model
-                        geometry.computeBoundingBox();
-                        const center = new THREE.Vector3();
-                        geometry.boundingBox.getCenter(center);
-                        geometry.translate(-center.x, -center.y, -center.z);
+                            const material = new THREE.MeshPhongMaterial({ 
+                                color: 0x3b82f6, 
+                                specular: 0x444444, 
+                                shininess: 100 
+                            });
+                            threeState.currentMesh = new THREE.Mesh(geometry, material);
+                            
+                            geometry.computeBoundingBox();
+                            const center = new THREE.Vector3();
+                            geometry.boundingBox.getCenter(center);
+                            geometry.translate(-center.x, -center.y, -center.z);
 
-                        // Auto-scale to fit
-                        const size = new THREE.Vector3();
-                        geometry.boundingBox.getSize(size);
-                        const maxDim = Math.max(size.x, size.y, size.z);
-                        const scale = 50 / maxDim;
-                        this.currentMesh.scale.set(scale, scale, scale);
+                            const size = new THREE.Vector3();
+                            geometry.boundingBox.getSize(size);
+                            const maxDim = Math.max(size.x, size.y, size.z);
+                            const scale = 60 / maxDim;
+                            threeState.currentMesh.scale.set(scale, scale, scale);
 
-                        this.scene.add(this.currentMesh);
-                        this.hasModel = true;
-                        
-                        // Reset camera
-                        this.camera.position.set(50, 50, 50);
-                        this.controls.reset();
+                            threeState.scene.add(threeState.currentMesh);
+                            this.hasModel = true;
+                            
+                            threeState.camera.position.set(50, 50, 50);
+                            threeState.camera.lookAt(0, 0, 0);
+                            if (threeState.controls) threeState.controls.reset();
+                        } catch (err) {
+                            console.error("Errore STL:", err);
+                            alert("File STL non valido o troppo grande.");
+                        }
                     };
                     reader.readAsArrayBuffer(file);
                 },
