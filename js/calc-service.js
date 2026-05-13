@@ -6,7 +6,8 @@ const CalcService = {
     // Database stampanti espanso (Oltre 150 modelli)
     printerBrands: {
         'Bambu Lab': [
-            { name: 'X1-Carbon / X1-C', watts: 120 },
+            { name: 'X1-Carbon', watts: 120 },
+            { name: 'X1-C', watts: 120 },
             { name: 'X1-E', watts: 260 },
             { name: 'P1S', watts: 125 },
             { name: 'P1P', watts: 120 },
@@ -15,13 +16,16 @@ const CalcService = {
             { name: 'X1 Series (Base)', watts: 110 }
         ],
         'Creality': [
-            { name: 'K1 / K1C', watts: 180 },
+            { name: 'K1', watts: 180 },
+            { name: 'K1C', watts: 180 },
             { name: 'K1 Max', watts: 350 },
             { name: 'Ender 3 V3 Plus', watts: 160 },
             { name: 'Ender 3 V3 SE', watts: 115 },
             { name: 'Ender 3 V3 KE', watts: 130 },
-            { name: 'Ender 3 V2 / Pro', watts: 120 },
-            { name: 'Ender 3 Neo / Max Neo', watts: 120 },
+            { name: 'Ender 3 V2', watts: 120 },
+            { name: 'Ender 3 Pro', watts: 120 },
+            { name: 'Ender 3 Neo', watts: 120 },
+            { name: 'Ender 3 Max Neo', watts: 120 },
             { name: 'Ender 3 (Original)', watts: 100 },
             { name: 'Ender 5 S1', watts: 150 },
             { name: 'Ender 5 Plus', watts: 200 },
@@ -34,9 +38,12 @@ const CalcService = {
             { name: 'Halot One (Resin)', watts: 60 }
         ],
         'Prusa Research': [
-            { name: 'MK4S / MK4', watts: 100 },
-            { name: 'MK3S+ / MK3', watts: 80 },
-            { name: 'MK2.5S / MK2S', watts: 80 },
+            { name: 'MK4S', watts: 100 },
+            { name: 'MK4', watts: 100 },
+            { name: 'MK3S+', watts: 80 },
+            { name: 'MK3', watts: 80 },
+            { name: 'MK2.5S', watts: 80 },
+            { name: 'MK2S', watts: 80 },
             { name: 'XL (1 Toolhead)', watts: 235 },
             { name: 'XL (2 Toolheads)', watts: 280 },
             { name: 'XL (5 Toolheads)', watts: 350 },
@@ -45,10 +52,17 @@ const CalcService = {
             { name: 'SL1 (Resin)', watts: 100 }
         ],
         'Anycubic': [
-            { name: 'Kobra 3 / S1', watts: 185 },
-            { name: 'Kobra 2 Pro / Plus', watts: 150 },
+            { name: 'Kobra 3', watts: 185 },
+            { name: 'Kobra S1', watts: 185 },
+            { name: 'Kobra 2 Pro', watts: 150 },
+            { name: 'Kobra 2 Plus', watts: 150 },
+            { name: 'Kobra 2 Max', watts: 150 },
+            { name: 'Kobra 2 Neo', watts: 110 },
+            { name: 'Kobra X', watts: 250 },
+            { name: 'Kobra Max (Large)', watts: 250 },
             { name: 'Kobra Neo 2', watts: 110 },
-            { name: 'Kobra Go / Neo', watts: 110 },
+            { name: 'Kobra Go', watts: 110 },
+            { name: 'Kobra Neo', watts: 110 },
             { name: 'Photon Mono M7 Pro', watts: 120 },
             { name: 'Photon Mono M5s', watts: 100 },
             { name: 'Photon Mono 2', watts: 45 },
@@ -62,11 +76,14 @@ const CalcService = {
             { name: 'Neptune 4 Pro', watts: 150 },
             { name: 'Neptune 4', watts: 150 },
             { name: 'Neptune 3 Pro', watts: 120 },
-            { name: 'Neptune 3 Plus / Max', watts: 150 },
+            { name: 'Neptune 3 Plus', watts: 150 },
+            { name: 'Neptune 3 Max', watts: 150 },
             { name: 'Mars 5 Ultra (Resin)', watts: 35 },
-            { name: 'Mars 4 / 3 (Resin)', watts: 35 },
+            { name: 'Mars 4 (Resin)', watts: 35 },
+            { name: 'Mars 3 (Resin)', watts: 35 },
             { name: 'Saturn 4 Ultra (Resin)', watts: 144 },
-            { name: 'Saturn 3 / 2 (Resin)', watts: 100 },
+            { name: 'Saturn 3 (Resin)', watts: 100 },
+            { name: 'Saturn 2 (Resin)', watts: 100 },
             { name: 'Jupiter SE (Resin)', watts: 150 }
         ],
         'Artillery': [
@@ -91,7 +108,8 @@ const CalcService = {
         'Flashforge': [
             { name: 'Adventurer 5M Pro', watts: 150 },
             { name: 'Adventurer 5M', watts: 120 },
-            { name: 'Adventurer 4 / 4 Pro', watts: 150 },
+            { name: 'Adventurer 4', watts: 150 },
+            { name: 'Adventurer 4 Pro', watts: 150 },
             { name: 'Adventurer 3', watts: 100 },
             { name: 'Guider 3 Ultra', watts: 450 },
             { name: 'Creator Pro 2', watts: 320 }
@@ -168,13 +186,17 @@ const CalcService = {
         ],
         'Snapmaker': [
             { name: 'Artisan 3-in-1', watts: 400 },
-            { name: 'J1 / J1s IDEX', watts: 250 },
+            { name: 'J1 IDEX', watts: 250 },
+            { name: 'J1s IDEX', watts: 250 },
             { name: 'Snapmaker 2.0 A350', watts: 300 }
         ],
         'Raised3D': [
-            { name: 'Pro3 / Pro3 Plus', watts: 450 },
-            { name: 'E2 / E2CF', watts: 350 },
-            { name: 'Pro2 / Pro2 Plus', watts: 400 }
+            { name: 'Pro3', watts: 450 },
+            { name: 'Pro3 Plus', watts: 450 },
+            { name: 'E2', watts: 350 },
+            { name: 'E2CF', watts: 350 },
+            { name: 'Pro2', watts: 400 },
+            { name: 'Pro2 Plus', watts: 400 }
         ],
         'Zortrax': [
             { name: 'M200 Plus', watts: 150 },
@@ -185,15 +207,19 @@ const CalcService = {
             { name: 'W7', watts: 180 }
         ],
         'Anet': [
-            { name: 'A8 / A8 Plus', watts: 120 },
-            { name: 'ET4 / ET5 Pro', watts: 150 }
+            { name: 'A8', watts: 120 },
+            { name: 'A8 Plus', watts: 120 },
+            { name: 'ET4', watts: 150 },
+            { name: 'ET5 Pro', watts: 150 }
         ],
         'Voxelab': [
-            { name: 'Aquila X3 / X2', watts: 120 },
+            { name: 'Aquila X3', watts: 120 },
+            { name: 'Aquila X2', watts: 120 },
             { name: 'Elefoo', watts: 100 }
         ],
         'Mingda': [
-            { name: 'Magician X / Pro', watts: 150 },
+            { name: 'Magician X', watts: 150 },
+            { name: 'Magician Pro', watts: 150 },
             { name: 'Rock 3', watts: 150 }
         ],
         'Tronxy': [
