@@ -172,27 +172,39 @@ const CalcService = {
     },
 
     /**
-     * Calcola il preventivo completo (Versione Semplificata)
+     * Calcola il preventivo completo con logica avanzata (Usura % e Fallimenti %)
      */
     generateQuote(data) {
+        const totalHours = data.hours + (data.minutes / 60);
+        
         // 1. Costi Diretti
         const materialCost = this.calculatePlasticCost(data.spools);
         const energyCost = this.calculateTotalEnergyCost(data.hours, data.minutes, data.wattage, data.kwhCost);
         
-        // 2. Totale Base (Somma di materiale ed energia)
-        let basePrice = materialCost + energyCost;
+        // 2. Totale Costi Vivi (Materiale + Energia)
+        let runningTotal = materialCost + energyCost;
         
-        // 3. Calcolo Tasse (IVA)
+        // 3. Usura Macchina (Percentuale applicata sui costi vivi)
+        const machineCost = runningTotal * ((data.maintenanceCost || 0) / 100);
+        runningTotal += machineCost;
+        
+        // 4. Impatto Fallimenti (Percentuale applicata sul totale corrente)
+        const failureImpact = runningTotal * ((data.failureRate || 0) / 100);
+        const basePrice = runningTotal + failureImpact;
+        
+        // 5. Calcolo Tasse (IVA)
         const ivaAmount = basePrice * (data.ivaPercent / 100);
         const priceWithIva = basePrice + ivaAmount;
         
-        // 4. Calcolo Margine di Profitto
+        // 6. Calcolo Margine di Profitto
         const profitAmount = priceWithIva * (data.profitPercent / 100);
         const finalPrice = priceWithIva + profitAmount;
 
         return {
             materialCost,
             energyCost,
+            machineCost,
+            failureImpact,
             basePrice,
             ivaAmount,
             priceWithIva,
