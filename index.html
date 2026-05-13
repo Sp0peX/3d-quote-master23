@@ -159,7 +159,7 @@
                 // 3D Viewer Logic
                 init3D() {
                     console.log("Inizializzazione 3D...");
-                    const container = document.getElementById('stl-container');
+                    const container = document.getElementById('canvas-3d');
                     if (!container) return;
 
                     try {
@@ -211,7 +211,6 @@
                         this.$watch('darkMode', value => {
                             if (threeState.scene) threeState.scene.background = new THREE.Color(value ? 0x111827 : 0xf3f4f6);
                         });
-                        console.log("3D Inizializzato!");
                     } catch (err) {
                         console.error("Errore 3D:", err);
                     }
@@ -808,9 +807,12 @@
                          @drop.prevent="handleDrop($event)"
                          @click="$refs.fileInput.click()">
                         
+                        <!-- Hidden Canvas for Three.js -->
+                        <div id="canvas-3d" class="absolute inset-0 z-0" x-show="hasModel"></div>
+                        
                         <input type="file" x-ref="fileInput" class="hidden" accept=".stl" @change="handleFileSelect($event)">
                         
-                        <div x-show="!hasModel" class="text-center p-6 pointer-events-none">
+                        <div x-show="!hasModel" class="relative z-10 text-center p-6 pointer-events-none">
                             <svg class="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
                             <p class="text-xs text-gray-400 font-medium" x-text="t('drop_stl')"></p>
                         </div>
