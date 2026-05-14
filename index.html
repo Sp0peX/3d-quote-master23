@@ -168,9 +168,6 @@
                     this.saving = true;
                     try {
                         const quoteData = {
-                            userId: this.user.uid,
-                            userEmail: this.user.email,
-                            timestamp: Date.now(),
                             printer: this.getSelectedPrinterName(),
                             finalPrice: this.results.finalPrice,
                             details: {
@@ -188,7 +185,7 @@
                                 }
                             }
                         };
-                        await DbService.saveQuote(quoteData);
+                        await DbService.saveQuote(this.user.uid, quoteData);
                         await this.fetchQuotes();
                         alert(this.language === 'it' ? "Preventivo salvato correttamente!" : "Quote saved successfully!");
                     } catch (err) {
@@ -203,9 +200,11 @@
                     if (!this.user) return;
                     this.loadingQuotes = true;
                     try {
-                        this.quotes = await DbService.getUserQuotes(this.user.uid);
+                        const data = await DbService.getUserQuotes(this.user.uid);
+                        this.quotes = Array.isArray(data) ? data : [];
                     } catch (err) {
                         console.error("Errore recupero:", err);
+                        this.quotes = [];
                     } finally {
                         this.loadingQuotes = false;
                     }
@@ -222,7 +221,12 @@
                 },
 
                 formatDate(timestamp) {
-                    return new Date(timestamp).toLocaleString(this.language === 'it' ? 'it-IT' : 'en-US', {
+                    let ms = timestamp;
+                    if (timestamp && typeof timestamp.toMillis === 'function') ms = timestamp.toMillis();
+                    if (timestamp && typeof timestamp.seconds === 'number') ms = timestamp.seconds * 1000;
+                    const date = new Date(ms);
+                    if (Number.isNaN(date.getTime())) return '-';
+                    return date.toLocaleString(this.language === 'it' ? 'it-IT' : 'en-US', {
                         day: '2-digit',
                         month: '2-digit',
                         year: 'numeric',
@@ -918,9 +922,9 @@
                                 </div>
                                 <div class="flex justify-between items-end">
                                     <div class="text-xs text-gray-500 dark:text-gray-400">
-                                        <span x-text="quote.details.inputs.hours"></span>h 
-                                        <span x-text="quote.details.inputs.minutes"></span>m • 
-                                        <span x-text="quote.details.inputs.spools[0].grams"></span>g
+                                        <span x-text="quote?.details?.inputs?.hours ?? '-'"></span>h 
+                                        <span x-text="quote?.details?.inputs?.minutes ?? '-'"></span>m • 
+                                        <span x-text="quote?.details?.inputs?.spools?.[0]?.grams ?? '-'"></span>g
                                     </div>
                                     <div class="text-lg font-black text-gray-900 dark:text-white" x-text="formatEuro(quote.finalPrice)"></div>
                                 </div>
