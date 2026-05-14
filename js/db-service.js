@@ -2,6 +2,20 @@
  * DbService - Gestione salvataggio e recupero dati (Storico preventivi)
  */
 const DbService = {
+    async uploadStl(userId, file) {
+        if (!file) return null;
+        if (!firebase?.storage) return null;
+
+        const storage = firebase.storage();
+        const safeName = String(file.name || 'model.stl').replace(/[^\w.\-]+/g, '_');
+        const path = `users/${userId}/stl/${Date.now()}_${safeName}`;
+        const ref = storage.ref().child(path);
+        const metadata = { contentType: file.type || 'application/sla' };
+        await ref.put(file, metadata);
+        const downloadUrl = await ref.getDownloadURL();
+        return { name: file.name || safeName, size: file.size || 0, path, downloadUrl };
+    },
+
     /**
      * Salva un preventivo nel cloud
      */
@@ -15,6 +29,18 @@ const DbService = {
             return docRef.id;
         } catch (error) {
             console.error("Errore salvataggio preventivo:", error);
+            throw error;
+        }
+    },
+
+    async updateQuote(quoteId, quoteData) {
+        try {
+            await db.collection('quotes').doc(quoteId).update({
+                ...quoteData,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } catch (error) {
+            console.error("Errore aggiornamento preventivo:", error);
             throw error;
         }
     },

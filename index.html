@@ -18,6 +18,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-storage-compat.js"></script>
 
     <!-- Project Scripts -->
     <script src="js/firebase-config.js"></script>
@@ -46,16 +47,23 @@
                 user: null,
                 searchPrinter: '',
                 showPrinterDropdown: false,
+                clientMode: false,
+                clientData: null,
                 
                 // 3D Viewer State
                 hasModel: false,
                 isDragging: false,
+                currentStlFile: null,
+                currentStlRemote: null,
                 
                 // Cloud State
                 quotes: [],
                 loadingQuotes: false,
                 saving: false,
                 quoteTitle: '',
+                historyFilter: '',
+                editingQuoteId: null,
+                editingQuoteStl: null,
 
                 // Calculator Data
                 spools: [{ costPerKg: 23.00, grams: 170 }],
@@ -71,19 +79,32 @@
                 printerBrands: CalcService.printerBrands,
                 
                 init() {
-                    // Controllo se Firebase è caricato (fondamentale per Render/GitHub)
-                    if (typeof auth !== 'undefined') {
-                        // Controllo Autenticazione
-                        AuthService.onAuthStateChanged(user => {
-                            if (!user) {
-                                window.location.href = 'auth.html';
-                            } else {
-                                this.user = user;
-                                this.fetchQuotes();
-                            }
+                    const params = new URLSearchParams(window.location.search);
+                    if (params.get('client') === '1') {
+                        this.clientMode = true;
+                        this.clientData = this.decodeClientData(params.get('data'));
+                        this.$nextTick(() => {
+                            const url = this.clientData?.stlUrl;
+                            if (!url) return;
+                            const tryLoad = () => {
+                                if (threeState.scene) this.loadSTLFromUrl(url);
+                                else setTimeout(tryLoad, 60);
+                            };
+                            tryLoad();
                         });
                     } else {
-                        console.warn("Firebase non configurato. L'app funzionerà in modalità locale (senza login).");
+                        if (typeof auth !== 'undefined') {
+                            AuthService.onAuthStateChanged(user => {
+                                if (!user) {
+                                    window.location.href = 'auth.html';
+                                } else {
+                                    this.user = user;
+                                    this.fetchQuotes();
+                                }
+                            });
+                        } else {
+                            console.warn("Firebase non configurato. L'app funzionerà in modalità locale (senza login).");
+                        }
                     }
 
                     this.$watch('language', value => localStorage.setItem('language', value));
@@ -133,6 +154,16 @@
                     });
                 },
 
+                get filteredQuotes() {
+                    const search = (this.historyFilter || '').toLowerCase().trim();
+                    if (!search) return this.quotes;
+                    return (this.quotes || []).filter(q => {
+                        const title = String(q?.title || '').toLowerCase();
+                        const printer = String(q?.printer || '').toLowerCase();
+                        return title.includes(search) || printer.includes(search);
+                    });
+                },
+
                 // Actions
                 addSpool() { this.spools.push({ costPerKg: 20.00, grams: 0 }); },
                 removeSpool(index) { this.spools.splice(index, 1); },
@@ -164,17 +195,103 @@
                 },
 
                 // Cloud Logic
+                encodeClientData(payload) {
+                    try {
+                        return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+                    } catch (e) {
+                        return '';
+                    }
+                },
+
+                decodeClientData(encoded) {
+                    if (!encoded) return null;
+                    try {
+                        const json = decodeURIComponent(escape(atob(encoded)));
+                        return JSON.parse(json);
+                    } catch (e) {
+                        return null;
+                    }
+                },
+
+                getClientLink(quote) {
+                    const base = window.location.href.split('?')[0];
+                    const payload = {
+                        title: quote?.title || '',
+                        printer: quote?.printer || '',
+                        finalPrice: quote?.finalPrice || 0,
+                        stlUrl: quote?.stl?.downloadUrl || null
+                    };
+                    const encoded = this.encodeClientData(payload);
+                    return `${base}?client=1&data=${encodeURIComponent(encoded)}`;
+                },
+
+                async copyClientLink(quote) {
+                    const url = this.getClientLink(quote);
+                    try {
+                        await navigator.clipboard.writeText(url);
+                        alert(this.language === 'it' ? 'Link copiato!' : 'Link copied!');
+                    } catch (e) {
+                        prompt(this.language === 'it' ? 'Copia questo link' : 'Copy this link', url);
+                    }
+                },
+
+                loadQuote(quote) {
+                    this.editingQuoteId = quote?.id || null;
+                    this.editingQuoteStl = quote?.stl || null;
+                    this.quoteTitle = quote?.title || '';
+                    this.currentStlFile = null;
+
+                    const inputs = quote?.details?.inputs;
+                    if (Array.isArray(inputs?.spools)) this.spools = JSON.parse(JSON.stringify(inputs.spools));
+                    if (Number.isFinite(inputs?.hours)) this.printHours = inputs.hours;
+                    if (Number.isFinite(inputs?.minutes)) this.printMinutes = inputs.minutes;
+
+                    if (typeof inputs?.selectedPrinterId === 'string') this.selectedPrinter = inputs.selectedPrinterId;
+                    if (Number.isFinite(inputs?.wattage)) this.printerWattage = inputs.wattage;
+                    if (Number.isFinite(inputs?.kwhCost)) this.kwhCost = inputs.kwhCost;
+                    if (Number.isFinite(inputs?.maintenanceCost)) this.maintenanceCost = inputs.maintenanceCost;
+                    if (Number.isFinite(inputs?.failureRate)) this.failureRate = inputs.failureRate;
+                    if (Number.isFinite(inputs?.profitPercent)) this.profitPercent = inputs.profitPercent;
+                    if (Number.isFinite(inputs?.ivaPercent)) this.ivaPercent = inputs.ivaPercent;
+
+                    if (!threeState.scene) this.init3D();
+                    if (quote?.stl?.downloadUrl) {
+                        this.currentStlRemote = quote.stl;
+                        this.loadSTLFromUrl(quote.stl.downloadUrl);
+                    } else {
+                        this.currentStlRemote = null;
+                        this.hasModel = false;
+                        if (threeState.currentMesh && threeState.scene) threeState.scene.remove(threeState.currentMesh);
+                        threeState.currentMesh = null;
+                    }
+                },
+
+                clearEditing() {
+                    this.editingQuoteId = null;
+                    this.editingQuoteStl = null;
+                    this.quoteTitle = '';
+                    this.currentStlFile = null;
+                },
+
                 async saveQuote() {
                     if (!this.user) return;
                     this.saving = true;
                     try {
                         const providedTitle = (this.quoteTitle || '').trim();
                         const resolvedTitle = providedTitle || `${this.getSelectedPrinterName()} - ${this.formatDate(Date.now())}`;
+
+                        let stl = this.editingQuoteStl;
+                        if (this.currentStlFile) {
+                            const uploaded = await DbService.uploadStl(this.user.uid, this.currentStlFile);
+                            if (uploaded) stl = uploaded;
+                        }
+
                         const quoteData = {
                             userEmail: this.user.email,
                             title: resolvedTitle,
                             printer: this.getSelectedPrinterName(),
                             finalPrice: this.results.finalPrice,
+                            stl: stl || null,
                             details: {
                                 materialCost: this.results.materialCost,
                                 energyCost: this.results.energyCost,
@@ -186,13 +303,26 @@
                                     spools: JSON.parse(JSON.stringify(this.spools)),
                                     hours: this.printHours,
                                     minutes: this.printMinutes,
-                                    wattage: this.printerWattage
+                                    wattage: this.printerWattage,
+                                    selectedPrinterId: this.selectedPrinter,
+                                    kwhCost: this.kwhCost,
+                                    maintenanceCost: this.maintenanceCost,
+                                    failureRate: this.failureRate,
+                                    profitPercent: this.profitPercent,
+                                    ivaPercent: this.ivaPercent
                                 }
                             }
                         };
-                        await DbService.saveQuote(this.user.uid, quoteData);
+                        if (this.editingQuoteId) {
+                            await DbService.updateQuote(this.editingQuoteId, quoteData);
+                        } else {
+                            await DbService.saveQuote(this.user.uid, quoteData);
+                        }
                         await this.fetchQuotes();
+                        this.editingQuoteId = null;
+                        this.editingQuoteStl = null;
                         this.quoteTitle = '';
+                        this.currentStlFile = null;
                         alert(this.language === 'it' ? "Preventivo salvato correttamente!" : "Quote saved successfully!");
                     } catch (err) {
                         console.error("Errore salvataggio:", err);
@@ -312,8 +442,44 @@
                     if (file && file.name.toLowerCase().endsWith('.stl')) this.loadSTL(file);
                 },
 
+                renderStlArrayBuffer(arrayBuffer) {
+                    if (!threeState.scene) return;
+                    const loader = new THREE.STLLoader();
+                    const geometry = loader.parse(arrayBuffer);
+
+                    if (threeState.currentMesh) threeState.scene.remove(threeState.currentMesh);
+
+                    const material = new THREE.MeshPhongMaterial({ 
+                        color: 0x3b82f6, 
+                        specular: 0x444444, 
+                        shininess: 100 
+                    });
+                    threeState.currentMesh = new THREE.Mesh(geometry, material);
+                    
+                    geometry.computeBoundingBox();
+                    const center = new THREE.Vector3();
+                    geometry.boundingBox.getCenter(center);
+                    geometry.translate(-center.x, -center.y, -center.z);
+
+                    const size = new THREE.Vector3();
+                    geometry.boundingBox.getSize(size);
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const scale = 60 / maxDim;
+                    threeState.currentMesh.scale.set(scale, scale, scale);
+
+                    threeState.scene.add(threeState.currentMesh);
+                    this.hasModel = true;
+                    
+                    threeState.camera.position.set(50, 50, 50);
+                    threeState.camera.lookAt(0, 0, 0);
+                    if (threeState.controls) threeState.controls.reset();
+                },
+
                 loadSTL(file) {
                     if (!threeState.scene) return;
+
+                    this.currentStlFile = file;
+                    this.currentStlRemote = null;
                     
                     // Controllo dimensione file (Max 50MB per stabilità browser)
                     if (file.size > 50 * 1024 * 1024) {
@@ -324,41 +490,26 @@
                     const reader = new FileReader();
                     reader.onload = (e) => {
                         try {
-                            const loader = new THREE.STLLoader();
-                            const geometry = loader.parse(e.target.result);
-                            
-                            if (threeState.currentMesh) threeState.scene.remove(threeState.currentMesh);
-
-                            const material = new THREE.MeshPhongMaterial({ 
-                                color: 0x3b82f6, 
-                                specular: 0x444444, 
-                                shininess: 100 
-                            });
-                            threeState.currentMesh = new THREE.Mesh(geometry, material);
-                            
-                            geometry.computeBoundingBox();
-                            const center = new THREE.Vector3();
-                            geometry.boundingBox.getCenter(center);
-                            geometry.translate(-center.x, -center.y, -center.z);
-
-                            const size = new THREE.Vector3();
-                            geometry.boundingBox.getSize(size);
-                            const maxDim = Math.max(size.x, size.y, size.z);
-                            const scale = 60 / maxDim;
-                            threeState.currentMesh.scale.set(scale, scale, scale);
-
-                            threeState.scene.add(threeState.currentMesh);
-                            this.hasModel = true;
-                            
-                            threeState.camera.position.set(50, 50, 50);
-                            threeState.camera.lookAt(0, 0, 0);
-                            if (threeState.controls) threeState.controls.reset();
+                            this.renderStlArrayBuffer(e.target.result);
                         } catch (err) {
                             console.error("Errore STL:", err);
                             alert("File STL non valido o troppo grande.");
                         }
                     };
                     reader.readAsArrayBuffer(file);
+                },
+
+                async loadSTLFromUrl(url) {
+                    if (!url) return;
+                    if (!threeState.scene) return;
+                    try {
+                        const res = await fetch(url);
+                        const arrayBuffer = await res.arrayBuffer();
+                        this.renderStlArrayBuffer(arrayBuffer);
+                    } catch (err) {
+                        console.error("Errore caricamento STL remoto:", err);
+                        this.hasModel = false;
+                    }
                 },
                 
                 translations: {
@@ -411,6 +562,15 @@
                         history: 'Storico Cloud',
                         calc: 'Calcolatore',
                         save: 'Salva nel Cloud',
+                        update: 'Aggiorna',
+                        cancel_edit: 'Annulla',
+                        delete: 'Elimina',
+                        load_quote: 'Modifica',
+                        client_link: 'Link Cliente',
+                        history_filter: 'Filtra per nome o stampante...',
+                        history_no_results: 'Nessun risultato',
+                        client_view: 'Vista Cliente',
+                        client_no_stl: 'Nessun modello allegato',
                         quote_name: 'Nome Preventivo',
                         quote_name_placeholder: 'Es. Porta cellulare, Cliente Mario, Proto v2...',
                         unnamed_quote: 'Preventivo senza nome',
@@ -474,6 +634,15 @@
                         history: 'Cloud History',
                         calc: 'Calculator',
                         save: 'Save to Cloud',
+                        update: 'Update',
+                        cancel_edit: 'Cancel',
+                        delete: 'Delete',
+                        load_quote: 'Edit',
+                        client_link: 'Customer Link',
+                        history_filter: 'Filter by name or printer...',
+                        history_no_results: 'No results',
+                        client_view: 'Customer View',
+                        client_no_stl: 'No model attached',
                         quote_name: 'Quote Name',
                         quote_name_placeholder: 'e.g. Phone stand, Customer Mario, Proto v2...',
                         unnamed_quote: 'Untitled quote',
@@ -537,6 +706,15 @@
                         history: 'Historique Cloud',
                         calc: 'Calculateur',
                         save: 'Enregistrer',
+                        update: 'Mettre à jour',
+                        cancel_edit: 'Annuler',
+                        delete: 'Supprimer',
+                        load_quote: 'Modifier',
+                        client_link: 'Lien Client',
+                        history_filter: 'Filtrer par nom ou imprimante...',
+                        history_no_results: 'Aucun résultat',
+                        client_view: 'Vue Client',
+                        client_no_stl: 'Aucun modèle joint',
                         quote_name: 'Nom du Devis',
                         quote_name_placeholder: 'Ex. Support téléphone, Client Mario, Proto v2...',
                         unnamed_quote: 'Devis sans titre',
@@ -591,6 +769,15 @@
                         history: 'Historial Cloud',
                         calc: 'Calculadora',
                         save: 'Guardar en Cloud',
+                        update: 'Actualizar',
+                        cancel_edit: 'Cancelar',
+                        delete: 'Eliminar',
+                        load_quote: 'Editar',
+                        client_link: 'Link Cliente',
+                        history_filter: 'Filtrar por nombre o impresora...',
+                        history_no_results: 'Sin resultados',
+                        client_view: 'Vista Cliente',
+                        client_no_stl: 'Ningún modelo adjunto',
                         quote_name: 'Nombre del Presupuesto',
                         quote_name_placeholder: 'Ej. Soporte móvil, Cliente Mario, Proto v2...',
                         unnamed_quote: 'Presupuesto sin título',
@@ -645,6 +832,15 @@
                         history: 'Cloud-Verlauf',
                         calc: 'Rechner',
                         save: 'Cloud speichern',
+                        update: 'Aktualisieren',
+                        cancel_edit: 'Abbrechen',
+                        delete: 'Löschen',
+                        load_quote: 'Bearbeiten',
+                        client_link: 'Kundenlink',
+                        history_filter: 'Nach Name oder Drucker filtern...',
+                        history_no_results: 'Keine Ergebnisse',
+                        client_view: 'Kundenansicht',
+                        client_no_stl: 'Kein Modell angehängt',
                         quote_name: 'Angebotsname',
                         quote_name_placeholder: 'z.B. Handyhalter, Kunde Mario, Proto v2...',
                         unnamed_quote: 'Angebot ohne Titel',
@@ -660,7 +856,7 @@
 <body class="bg-gray-100 dark:bg-gray-900 min-h-screen transition-colors duration-200" x-cloak>
     <div class="pb-10">
         <!-- Navbar -->
-        <nav class="max-w-6xl mx-auto px-4 py-6 flex justify-between items-center">
+        <nav x-show="!clientMode" class="max-w-6xl mx-auto px-4 py-6 flex justify-between items-center">
             <div class="flex items-center gap-6">
                 <h1 class="text-2xl font-bold text-blue-600 dark:text-blue-400" x-text="t('app_title')"></h1>
             </div>
@@ -694,10 +890,14 @@
             </div>
         </nav>
 
+        <div x-show="clientMode" class="max-w-6xl mx-auto px-4 py-8">
+            <h1 class="text-xl font-black text-gray-900 dark:text-white tracking-tight" x-text="t('app_title')"></h1>
+        </div>
+
         <!-- Calculator View -->
         <main class="max-w-[1600px] mx-auto px-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 items-start">
             <!-- Colonna 1: Impostazioni e Input -->
-            <div class="space-y-6">
+            <div x-show="!clientMode" class="space-y-6">
                 <div class="flex items-center justify-between mb-2">
                     <h2 class="text-2xl font-black dark:text-white tracking-tight" x-text="t('calc')"></h2>
                 </div>
@@ -876,7 +1076,7 @@
                             <span x-text="t('stl_viewer')"></span>
                         </h3>
                         <!-- Cute Upload Button -->
-                        <button @click="$refs.fileInput.click()" 
+                        <button x-show="!clientMode" @click="$refs.fileInput.click()" 
                                 class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-500/20 active:scale-95">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                             <span>STL</span>
@@ -886,24 +1086,24 @@
                     <div id="stl-container" 
                          class="relative w-full h-[400px] bg-gray-50 dark:bg-gray-900 rounded-2xl border-2 border-dashed transition-all duration-200 flex flex-col items-center justify-center overflow-hidden"
                          :class="isDragging ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700'"
-                         @dragover.prevent="isDragging = true"
-                         @dragleave.prevent="isDragging = false"
-                         @drop.prevent="handleDrop($event)">
+                         @dragover.prevent="if (!clientMode) isDragging = true"
+                         @dragleave.prevent="if (!clientMode) isDragging = false"
+                         @drop.prevent="if (!clientMode) handleDrop($event)">
                         
                         <!-- Hidden Canvas for Three.js -->
                         <div id="canvas-3d" class="absolute inset-0 z-0" x-show="hasModel"></div>
                         
-                        <input type="file" x-ref="fileInput" class="hidden" accept=".stl" @change="handleFileSelect($event)">
+                        <input type="file" x-ref="fileInput" class="hidden" accept=".stl" @change="handleFileSelect($event)" x-show="!clientMode">
                         
                         <div x-show="!hasModel" class="relative z-10 text-center p-6 pointer-events-none">
                             <svg class="w-16 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-                            <p class="text-sm text-gray-400 font-medium" x-text="t('drop_stl')"></p>
+                            <p class="text-sm text-gray-400 font-medium" x-text="clientMode ? t('client_no_stl') : t('drop_stl')"></p>
                         </div>
                     </div>
                 </section>
 
                 <!-- Cloud History Section -->
-                <section class="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <section x-show="!clientMode" class="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <div class="flex items-center justify-between mb-6">
                         <h3 class="text-lg font-bold dark:text-white flex items-center gap-2">
                             <div class="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
@@ -914,6 +1114,18 @@
                         <button @click="fetchQuotes()" class="p-2 text-gray-400 hover:text-purple-500 transition-colors" :class="{ 'animate-spin': loadingQuotes }">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
                         </button>
+                    </div>
+
+                    <div class="mb-4">
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                            </div>
+                            <input type="text"
+                                   x-model="historyFilter"
+                                   :placeholder="t('history_filter')"
+                                   class="w-full pl-10 pr-3 py-2 bg-gray-50 dark:bg-gray-900/30 dark:text-white border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 transition-all text-xs">
+                        </div>
                     </div>
 
                     <div class="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
@@ -930,7 +1142,13 @@
                             </div>
                         </template>
 
-                        <template x-for="quote in quotes" :key="quote.id">
+                        <template x-if="!loadingQuotes && quotes.length > 0 && filteredQuotes.length === 0">
+                            <div class="text-center py-10">
+                                <p class="text-sm text-gray-400" x-text="t('history_no_results')"></p>
+                            </div>
+                        </template>
+
+                        <template x-for="quote in filteredQuotes" :key="quote.id">
                             <div class="group bg-gray-50 dark:bg-gray-700/30 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-900 transition-all">
                                 <div class="flex justify-between items-start mb-2">
                                     <div>
@@ -938,9 +1156,18 @@
                                         <p class="text-[10px] text-gray-500 dark:text-gray-400" x-show="quote?.title && quote?.printer && quote.title !== quote.printer" x-text="quote.printer"></p>
                                         <p class="text-[10px] text-gray-400" x-text="formatDate(quote.timestamp)"></p>
                                     </div>
-                                    <button @click="deleteQuote(quote.id)" class="text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                    </button>
+                                    <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <span x-show="quote?.stl?.downloadUrl" class="text-[10px] font-black px-2 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">STL</span>
+                                        <button @click.stop="copyClientLink(quote)" class="text-gray-300 hover:text-blue-500 transition-colors" :title="t('client_link')">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 010 5.656l-1.414 1.414a4 4 0 01-5.656 0l-1.414-1.414a4 4 0 010-5.656l1.414-1.414a4 4 0 015.656 0"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.172 13.828a4 4 0 010-5.656l1.414-1.414a4 4 0 015.656 0l1.414 1.414a4 4 0 010 5.656l-1.414 1.414a4 4 0 01-5.656 0"></path></svg>
+                                        </button>
+                                        <button @click.stop="loadQuote(quote)" class="text-gray-300 hover:text-purple-500 transition-colors" :title="t('load_quote')">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 11l6-6m2 2l-6 6m-2 2H7v-2l9-9 2 2-9 9z"></path></svg>
+                                        </button>
+                                        <button @click.stop="deleteQuote(quote.id)" class="text-gray-300 hover:text-red-500 transition-colors" :title="t('delete')">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="flex justify-between items-end">
                                     <div class="text-xs text-gray-500 dark:text-gray-400">
@@ -948,7 +1175,7 @@
                                         <span x-text="quote?.details?.inputs?.minutes ?? '-'"></span>m • 
                                         <span x-text="quote?.details?.inputs?.spools?.[0]?.grams ?? '-'"></span>g
                                     </div>
-                                    <div class="text-lg font-black text-gray-900 dark:text-white" x-text="formatEuro(quote.finalPrice)"></div>
+                                    <div class="text-[11px] font-black px-3 py-1 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300" x-text="formatEuro(quote.finalPrice)"></div>
                                 </div>
                             </div>
                         </template>
@@ -967,7 +1194,15 @@
                         <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
                     </h2>
                     
-                    <div class="flex-grow space-y-5 relative z-10">
+                    <div x-show="clientMode" class="flex-grow relative z-10">
+                        <div class="text-center mb-6">
+                            <div class="text-[10px] uppercase tracking-[0.3em] font-black text-gray-400" x-text="t('client_view')"></div>
+                            <div class="mt-2 text-xl sm:text-2xl font-black tracking-tight" x-text="clientData?.title || clientData?.printer || t('unnamed_quote')"></div>
+                            <div class="mt-1 text-xs text-gray-400" x-show="clientData?.title && clientData?.printer && clientData.title !== clientData.printer" x-text="clientData.printer"></div>
+                        </div>
+                    </div>
+
+                    <div x-show="!clientMode" class="flex-grow space-y-5 relative z-10">
                         <div class="flex justify-between items-center group">
                             <span class="text-xs uppercase tracking-widest text-gray-400 group-hover:text-white transition-colors" x-text="t('material_cost')"></span>
                             <span class="text-lg font-bold" x-text="formatEuro(results.materialCost)"></span>
@@ -1008,10 +1243,10 @@
 
                     <div class="mt-10 bg-gradient-to-br from-blue-600 to-blue-800 p-8 rounded-[2rem] shadow-2xl border border-white/10 transform transition-transform hover:scale-[1.02]">
                         <div class="text-[10px] uppercase tracking-[0.3em] font-black text-blue-200 mb-3" x-text="t('final_price_label')"></div>
-                        <div class="text-5xl sm:text-6xl font-black tracking-tighter" x-text="formatEuro(results.finalPrice)"></div>
+                        <div class="text-5xl sm:text-6xl font-black tracking-tighter" x-text="formatEuro(clientMode ? clientData?.finalPrice : results.finalPrice)"></div>
                     </div>
 
-                    <div class="mt-6">
+                    <div x-show="!clientMode" class="mt-6">
                         <label class="block text-[10px] uppercase tracking-[0.3em] font-black text-gray-400 mb-2" x-text="t('quote_name')"></label>
                         <input type="text"
                                x-model="quoteTitle"
@@ -1020,13 +1255,21 @@
                                class="w-full px-4 py-3 bg-white/5 text-white placeholder:text-gray-500 border border-white/10 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all">
                     </div>
 
-                    <button @click="saveQuote()" 
-                            :disabled="saving"
-                            class="w-full mt-6 py-4 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed border border-white/10 rounded-2xl flex items-center justify-center gap-3 transition-all group">
+                    <div x-show="!clientMode" class="mt-6 flex gap-3">
+                        <button type="button"
+                                x-show="editingQuoteId"
+                                @click="clearEditing()"
+                                class="flex-1 py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-bold text-sm uppercase tracking-wider transition-all">
+                            <span x-text="t('cancel_edit')"></span>
+                        </button>
+
+                        <button @click="saveQuote()" 
+                                :disabled="saving"
+                                class="flex-1 py-4 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed border border-white/10 rounded-2xl flex items-center justify-center gap-3 transition-all group">
                         <template x-if="!saving">
                             <div class="flex items-center gap-3">
                                 <svg class="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
-                                <span class="font-bold text-sm uppercase tracking-wider" x-text="t('save')"></span>
+                                <span class="font-bold text-sm uppercase tracking-wider" x-text="t(editingQuoteId ? 'update' : 'save')"></span>
                             </div>
                         </template>
                         <template x-if="saving">
@@ -1035,9 +1278,10 @@
                                 <span class="text-sm font-medium">Saving...</span>
                             </div>
                         </template>
-                    </button>
+                        </button>
+                    </div>
 
-                    <p class="mt-8 text-[9px] text-gray-500 uppercase tracking-widest text-center" x-text="t('footer_note')"></p>
+                    <p x-show="!clientMode" class="mt-8 text-[9px] text-gray-500 uppercase tracking-widest text-center" x-text="t('footer_note')"></p>
                 </section>
             </div>
         </main>
