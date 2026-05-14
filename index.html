@@ -168,6 +168,7 @@
                     this.saving = true;
                     try {
                         const quoteData = {
+                            userEmail: this.user.email,
                             printer: this.getSelectedPrinterName(),
                             finalPrice: this.results.finalPrice,
                             details: {
