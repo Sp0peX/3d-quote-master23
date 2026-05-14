@@ -10,6 +10,11 @@ const AuthService = {
             const result = await auth.signInWithPopup(googleProvider);
             return result.user;
         } catch (error) {
+            const code = error?.code;
+            if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+                await auth.signInWithRedirect(googleProvider);
+                return null;
+            }
             console.error("Errore Login Google:", error);
             throw error;
         }
