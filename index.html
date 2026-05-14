@@ -401,7 +401,7 @@
                         history: 'Storico Cloud',
                         calc: 'Calcolatore',
                         save: 'Salva nel Cloud',
-                        drop_stl: 'Trascina qui il file STL o clicca per caricare',
+                        drop_stl: 'Trascina qui il file STL oppure usa il pulsante STL',
                         stl_viewer: 'Anteprima 3D Modello',
                         confirm_delete_quote: 'Sei sicuro di voler eliminare questo preventivo?',
                         admin_panel: 'Pannello Admin',
@@ -461,7 +461,7 @@
                         history: 'Cloud History',
                         calc: 'Calculator',
                         save: 'Save to Cloud',
-                        drop_stl: 'Drop STL file here or click to upload',
+                        drop_stl: 'Drop STL file here or use the STL button',
                         stl_viewer: '3D Model Preview',
                         confirm_delete_quote: 'Are you sure you want to delete this quote?',
                         admin_panel: 'Admin Panel',
@@ -859,12 +859,11 @@
                     </div>
                     
                     <div id="stl-container" 
-                         class="relative w-full h-[400px] bg-gray-50 dark:bg-gray-900 rounded-2xl border-2 border-dashed transition-all duration-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden"
+                         class="relative w-full h-[400px] bg-gray-50 dark:bg-gray-900 rounded-2xl border-2 border-dashed transition-all duration-200 flex flex-col items-center justify-center overflow-hidden"
                          :class="isDragging ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700'"
                          @dragover.prevent="isDragging = true"
                          @dragleave.prevent="isDragging = false"
-                         @drop.prevent="handleDrop($event)"
-                         @click="$refs.fileInput.click()">
+                         @drop.prevent="handleDrop($event)">
                         
                         <!-- Hidden Canvas for Three.js -->
                         <div id="canvas-3d" class="absolute inset-0 z-0" x-show="hasModel"></div>
